@@ -113,11 +113,16 @@ Positions (`sh` = `g_shiftUnits`, currently 0):
 |---|---|---|---|---|---|
 | 4 | (−cx, +cy) | (+cx, +cy) | (−cx, −cy) | (+cx, −cy) | — |
 | 5 | (−cx, +cy) | (+cx, +cy) | (−cx, −cy) | (+cx, −cy) | (0, 0) middle |
-| 3 | (−cx, +cy) | (+cx, +cy) | (0, 0) middle | — | — |
+| 3 | (−cx, +cy) | (+cx, +cy) | (0, −cy) bottom centre | — | — |
 
-Three duelists reuse the five-screen grid **without its bottom row**: two across the top and
-the third in the middle. All three counts share one code path — `np` and the `tx[]`/`ty[]`
-tables are the only difference.
+Three duelists reuse the four-screen grid with **the bottom row reduced to one panel**, moved
+to the centre: two across the top, the third below and between them. All counts share one code
+path — `np` and the `tx[]`/`ty[]` tables are the only difference.
+
+**The third panel goes on the bottom row, not at the centre of the screen.** Parking it at
+`y = 0` left the whole block hanging from the top with an empty band underneath — the block was
+centred on nothing. On the bottom row it is symmetric about the centre line and keeps the row
+spacing every other count already uses.
 
 Why each clamp exists, so you do not "simplify" one away:
 - the `vis*0.035` inset — on 5D's the Quit cross sits in the top-left corner and was landing
@@ -141,6 +146,12 @@ prefab showing different captions, so whatever differs between them *is* the cap
   - **Pick the empty sibling.** The other one says "LP".
   - **Do not copy the artwork node's rect onto it.** The name field is already positioned
     correctly; copying scrambles it.
+  - **Correct its x, never its y.** VRAINS anchors its name box off the right of the plate, so
+    the field's world x is matched to the stock caption's. Matching the *y* as well is what
+    struck every name through: Standard rules its caption off with `Duelist/ImageLine`
+    (7.78 x 0.04), Simple with one 6.71 x 0.03 and GX with `Duelist/line` 4.00 x 0.02, and the
+    stock caption sits on that hairline. Move the name onto it and the line runs through the
+    glyphs. The field is already at the right height in its own skin.
 - The localiser fills captions a frame or two late, so **re-run the diff each frame during the
   settle burst**, not once at build time. `panel_ready()` gates it; `caption_is_the_score()`
   stops it landing on the life total.

@@ -12,7 +12,8 @@ approach is new — several of the obvious ones have already been tried and reve
 | 2026-08-23 | Started. APK decoded, `global-metadata.dat` cracked (custom v39 format), first injection working. Versions v1–v45 were spent purely on getting the settings rows and the four panels to appear at all. |
 | 2026-08-24 | 4- and 5-player calculators working end to end on all eight Calculator Designs: independent counters, keypad, Undo, Reset, and a Log dialog widened from two columns to four or five. Around v125. |
 | 2026-08-25 | Per-skin fitting (plate vs rect), cutout handling, button row normalisation. v224 shipped to the user. |
-| 2026-08-26 | v228–v230. A 3-player variant branched off (`archive/mod.c.3player`). Current shipped build: **v230**. |
+| 2026-08-26 | v228–v230. A 3-player variant branched off (`archive/mod.c.3player`). |
+| 2026-08-29 | v231: the struck-through captions and the off-centre 3-player grid. Built and signed, never installed — the phone had wireless debugging off. |
 | 2026-08-29 | Project moved to `~/ygo-calc` and reorganised into this structure; 183 MB of stale v25–v45 logcat and two superseded apks deleted. |
 
 ## What the early versions were doing
@@ -92,17 +93,42 @@ stayed lit after leaving and re-entering the screen. That is the normal cost of 
 
 ---
 
-## Current state (v230)
+## Current state (v231)
 
 Working: settings rows for 4 and 5 screens, the panel grid on all eight designs, independent
 counters, per-panel keypad, Reset/Undo, the widened Log dialog, the Log Archives list with
 names and timestamps, and restore-from-log.
 
-Open, as the user reported them on 2026-08-29:
+The user reported three defects against v230 on 2026-08-29. Two are addressed in v231 and
+**neither has been looked at on the phone yet** — wireless debugging was off, so v231 was built
+and signed but never installed. Until the user has seen them, they are fixes in name only.
 
-1. **Names struck through / crossed out on every screen.**
-2. **3-player mode is not centred** — the request was to return it to the 224 arrangement.
-3. **On the VRAINS design, names cannot be set at all.**
+1. **Names struck through on every panel.** — *fixed in v231, unverified.* `label_panel` moved
+   the mod's name field onto the stock caption's world centre, in both axes. Three skins rule
+   their caption off with a hairline (`Duelist/ImageLine` 7.78 x 0.04 on Standard, 6.71 x 0.03
+   on Simple, `Duelist/line` 4.00 x 0.02 on GX) and the stock caption sits on that rule, so
+   matching its y parked the name on the line. The nudge exists only because VRAINS anchors its
+   name box off the right of the plate — a horizontal problem — so it is now horizontal only.
+2. **3-player mode is not centred**, "return it to the 224 arrangement". — *fixed in v231,
+   unverified.* `ty[2]` was `-topMargin`, putting the third panel at the vertical centre while
+   the other two sat a full row above it: the block hung from the top with an empty band
+   underneath. It now goes on the bottom row at `-cy - topMargin`, like every other count, so
+   the three panels are symmetric about the centre line. **The v224 source no longer exists** —
+   every build before v230 was deleted before this repository was created — so this is a
+   reconstruction of what "centred" means, not a revert.
+3. **On the VRAINS design, names cannot be set at all.** — *still open.* Static reading did not
+   settle it. The caption path globals are reset on every design change, so a stale path is
+   ruled out; on paper VRAINS should resolve `g_capLen` to `Duelist/PlayerName` via the
+   blank-name-field branch and work. Distinguishing the remaining candidates needs one logcat
+   on the VRAINS design — the mod already prints everything required:
+
+   | Line | What it would mean |
+   |---|---|
+   | `cap: rejected - the search landed on LifePoints` | the diff keeps hitting the score and resets every frame, so no caption is ever chosen |
+   | *(no `cap: len=…` line at all)* | `panel_ready()` never goes true, so the search never runs |
+   | `cap: len=… node 'PlayerName'` then no `label:` line | the caption resolves but the write is dropped |
+   | `label: caption font is unusable and there is nothing to borrow` | the name is written and drawn with nothing |
+   | `name: duelist N is now '…'` missing after a rename | the rename never reaches the mod, so this is not a caption problem at all |
 
 `docs/STRATEGY-unique-names.md` holds the previous agent's written plan for the unique-names
 criterion; treat it as a proposal, not as fact — it predates any of the three reports above.

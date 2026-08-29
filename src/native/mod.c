@@ -1199,9 +1199,18 @@ static void label_panel(void *panelTf, const char *text) {
             }
         }
         if (haveStock) {
+            /* Horizontally only.  This nudge exists because VRAINS anchors its
+               name box off the right of the plate; the vertical half of it was
+               never asked for, and it is what struck every name through on every
+               other skin.  The skins rule the caption off with a hairline of its
+               own - Standard's /Duelist/ImageLine is 7.78 x 0.04 - and the stock
+               caption sits on that rule.  Matching the stock caption's y parked
+               our name on the rule, so every name came out crossed out.  The
+               name field is already at the right height in its own skin; only
+               its x ever needs correcting. */
             float cx, cy, wx, wy, wz;
             if (world_centre(node, &cx, &cy) && world_pos(node, &wx, &wy, &wz))
-                set_world(node, wx + (stockX - cx), wy + (stockY - cy), wz);
+                set_world(node, wx + (stockX - cx), wy, wz);
         }
         {   /* one-shot: what else on this plate is showing text? */
             static int said;
@@ -2459,8 +2468,8 @@ static void build_four_player_layout(void *self) {
        there is no short side to budget against. */
     const float lim = w * 0.5f - sw * 0.5f - w * 0.035f;
     if (cx > lim) cx = lim;
-    /* Three duelists use the five-screen grid without its bottom row: two across
-       the top and the third in the middle. */
+    /* Three duelists use the four-screen grid with the bottom row reduced to one
+       panel, centred: two across the top, the third below and between them. */
     const float tx[5] = { sh - cx, sh + cx, (np == 3) ? sh : sh - cx, sh + cx, sh };
     /* Space the rows off the panel's own height - a fixed fraction left the
        taller skins (GX) touching. */
@@ -2472,8 +2481,14 @@ static void build_four_player_layout(void *self) {
        Leave the difference as clearance. */
     const float cyMax = h * 0.5f - sh2 * 0.52f - h * 0.010f - topMargin;
     if (cy > cyMax) cy = cyMax;
+    /* The third panel goes on the bottom row, not in the middle of the screen.
+       Parking it at the centre left the whole three-panel block sitting in the
+       upper half with an empty band underneath, which is what "3 player mode is
+       not centred" was: the block was centred on nothing, it just hung from the
+       top.  On the bottom row the block is symmetric about the centre line and
+       keeps the row spacing every other count already uses. */
     const float ty[5] = { cy - topMargin, cy - topMargin,
-                          (np == 3) ? -topMargin : -cy - topMargin, -cy - topMargin,
+                          -cy - topMargin, -cy - topMargin,
                           -topMargin };
 
     g_np = np;

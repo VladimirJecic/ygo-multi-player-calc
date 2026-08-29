@@ -1,6 +1,6 @@
 # US-04 — Promena imena olovčicom, bez duplikata
 
-**Status:** ne radi   **Poslednja provera:** v230
+**Status:** ne radi   **Poslednja provera:** v230   **Popravka čeka proveru:** v231
 
 ## Kako je zahtev postavljen
 > "korisnik aplikacije na svakom ekranu ima opciju da klikom na olovčicu promeni svoje ime.
@@ -25,7 +25,18 @@ Dokaz greške: `reference/screenshots/bug-duplicate-names-5p.png`
 
 ### Otvoreno na v230 (prijava korisnika, 2026-08-29)
 - [ ] **Imena su precrtana na svim ekranima.**
-- [ ] **Na VRAINS dizajnu ime uopšte ne može da se postavi.**
+      *Popravljeno u v231, još neprovereno na telefonu.* `label_panel` je pomerao naše polje sa
+      imenom na centar originalnog natpisa, i po x i po y. Tri skina crtaju tanku liniju ispod
+      natpisa (`Duelist/ImageLine` 7.78 x 0.04 na Standardu, 6.71 x 0.03 na Simple,
+      `Duelist/line` 4.00 x 0.02 na GX), a originalni natpis stoji tačno na toj liniji — pa je
+      poravnanje po y parkiralo ime na crtu. To pomeranje postoji samo zbog VRAINS-a, kod koga
+      polje sa imenom visi desno od table, a to je vodoravni problem, pa se sada pomera **samo
+      po x**.
+- [ ] **Na VRAINS dizajnu ime uopšte ne može da se postavi.** *I dalje otvoreno.* Čitanje koda
+      ovo nije rešilo: putanje do natpisa se resetuju pri svakoj promeni dizajna, pa zastarela
+      putanja otpada, a na papiru VRAINS treba da nađe `Duelist/PlayerName` i da proradi.
+      Treba jedan logcat na VRAINS dizajnu — spisak linija koje razdvajaju preostale
+      mogućnosti je u `docs/HISTORY.md`, "Current state".
 
 ## Kako se proverava
 1. Pet igrača. Preimenuj igrača 2 u "Aleksa", zatvori kalkulator.
