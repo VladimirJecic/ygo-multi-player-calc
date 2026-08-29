@@ -1,4 +1,4 @@
-# US-03 — Klik na kalkulator otvara tačno tog igrača
+# US-03 — Klik na kalkulator otvara tačno tog igrača (4 i 5 ekrana)
 
 **Status:** radi   **Poslednja provera:** v230
 

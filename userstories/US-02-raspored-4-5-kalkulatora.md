@@ -1,6 +1,6 @@
-# US-02 — Pet kalkulatora, pravilno raspoređenih
+# US-02 — Raspored kalkulatora za 4 i 5 igrača
 
-**Status:** delimično   **Poslednja provera:** v230   **Popravka čeka proveru:** v231
+**Status:** radi   **Poslednja provera:** v241
 
 ## Kako je zahtev postavljen
 > "treba omogućiti klikom na duel da se unutra vidi pet kalkulatora pravilno raspoređenih,
@@ -16,15 +16,7 @@
 - [x] Isto važi na **svih osam dizajnova**: Standard, Simple, Duel Monsters, GX, 5D's,
       ZEXAL, ARC-V, VRAINS.
 - [x] Važi i pri hladnom ulasku i pri drugom ulasku bez restarta aplikacije.
-- [ ] **3 igrača: raspored nije centriran.** Korisnik traži povratak na raspored iz v224.
-      *Popravljeno u v231, još neprovereno na telefonu.* Treći panel je bio na vertikalnoj
-      sredini (`ty[2] = -topMargin`) dok su prva dva bila ceo red iznad njega, pa je ceo blok
-      visio o vrh ekrana sa praznom trakom ispod. Sada ide u donji red (`-cy - topMargin`),
-      vodoravno centriran, pa su tri panela simetrična u odnosu na sredinu.
-      **Napomena:** izvorni kod v224 više ne postoji — sve verzije pre v230 su obrisane pre
-      nego što je napravljen ovaj repozitorijum — pa ovo nije vraćanje na v224 nego
-      rekonstrukcija onoga što "centrirano" znači. Ako raspored iz v224 nije bio ovakav,
-      opiši ga i menjamo.
+*(Raspored za tri igrača se odvojio u US-07 i više nije deo ove priče.)*
 
 ## Kako se proverava
 1. Podesi 5 ekrana, uđi u duel — pet panela, peti na sredini.

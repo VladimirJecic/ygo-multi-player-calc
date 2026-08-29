@@ -1,4 +1,4 @@
-# US-01 — Izbor broja ekrana u podešavanjima
+# US-01 — Izbor 4 ili 5 ekrana u podešavanjima
 
 **Status:** radi   **Poslednja provera:** v230
 

@@ -134,7 +134,7 @@ The game holds exactly two of everything. The mod keeps its own five and writes 
 All three files live in `/data/user/0/jp.konami.YugiohOcgSupports/files/`.
 
 Names deserve their own note, because it is the acceptance criterion that keeps regressing
-(`userstories/US-04-jedinstvena-imena.md`). The game has `StartDuel.DuelistName1` /
+(`userstories/US-04-jedinstvena-imena-4-5.md`). The game has `StartDuel.DuelistName1` /
 `DuelistName2` as **statics**, with nothing indexed by player, so a name typed for duelist 4
 was written into duelist 2's slot. And `OnDuelistnameSubmit` is a direct call that the hook
 never sees. So `watch_rename()` polls the `TMP_InputField` instead, and:

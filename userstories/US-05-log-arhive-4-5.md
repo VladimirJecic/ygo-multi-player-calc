@@ -1,4 +1,4 @@
-# US-05 — Log arhive i nastavak duela
+# US-05 — Log arhive i nastavak duela (4 i 5 ekrana)
 
 **Status:** radi   **Poslednja provera:** v230
 

@@ -40,13 +40,14 @@ gde u kodu ovo živi, i šta je poznato da ume da pukne
 
 | # | Priča | Status na v240 |
 |---|---|---|
-| 01 | Izbor broja ekrana u podešavanjima | radi |
-| 02 | Pet kalkulatora, pravilno raspoređenih | delimično — raspored za 3 igrača nije potvrđen |
-| 03 | Klik na kalkulator otvara tačno tog igrača | radi |
-| 04 | Promena imena olovčicom, bez duplikata | radi na 1-7; ostaje VRAINS (8) |
-| 05 | Log arhive i nastavak duela | radi |
+| 01 | Izbor 4 ili 5 ekrana u podešavanjima | radi |
+| 02 | Raspored kalkulatora za 4 i 5 igrača | radi |
+| 03 | Klik na kalkulator otvara tačno tog igrača (4 i 5) | radi |
+| 04 | Promena imena olovčicom, bez duplikata (4 i 5) | radi na 1-7; ostaje VRAINS (8) |
+| 05 | Log arhive i nastavak duela (4 i 5) | radi |
 | 06 | Opcija „3 ekrana" u podešavanjima | radi (v241) |
 | 07 | Izgled kalkulatora sa tri igrača | nije počelo |
 
-Za tri igrača se piše više odvojenih priča, ne jedna: **06** je samo red u podešavanjima, **07**
+**Priče 01-05 su za 4 i 5 ekrana.** Tri igrača su zaseban niz, i piše se više odvojenih
+priča, ne jedna: **06** je samo red u podešavanjima, **07**
 samo izgled, a funkcionalnost (poeni i ime), upis u Log i vraćanje iz Loga dobijaju svaka svoju. Kad neka od njih bude naručena, dodaj je ovde.
