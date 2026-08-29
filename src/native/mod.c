@@ -770,15 +770,10 @@ static void *node_path(void *root, const int *path, int len) {
 }
 static void *node_at(void *root, int len) { return node_path(root, g_capPath, len); }
 
-/* Resolve a node the search remembered, on one panel.
-
-   By name, not by the child index the search recorded: label_panel re-siblings
-   the caption to the end of its parent so the skin's own bar cannot paint over
-   it, and that renumbers every child after it.  Resolved by index, the caption
-   walked TextPlayer -> PlayerName -> Text_obj -> Image, one node per frame,
-   writing the name into a new node each time and clearing the one before -
-   ending in a sprite that cannot draw text.  The path stays as the fallback for
-   a node with no usable name. */
+/* Resolve a node the search remembered, on one panel.  By name, not by the
+   child index the search recorded: label_panel re-siblings the caption to the
+   end of its parent, which renumbers every child after it.  The path stays as
+   the fallback for a node with no usable name. */
 static void *panel_node(void *panelTf, const char *nm, const int *path, int len) {
     if (!panelTf || len < 0) return NULL;
     if (nm && nm[0]) {
@@ -1229,11 +1224,10 @@ static void label_panel(void *panelTf, const char *text) {
             }
         }
         if (haveStock) {
-            /* Horizontally only.  The nudge is for VRAINS, which anchors its
+            /* Horizontally only - the nudge is for VRAINS, which anchors its
                name box off the right of the plate.  Matching the y as well
                parked the name on the hairline the skins rule their caption off
-               with (Standard's Duelist/ImageLine is 7.78 x 0.04), so every name
-               came out struck through.  The field's own height is correct. */
+               with (Standard's is 7.78 x 0.04) and struck every name through. */
             float cx, cy, wx, wy, wz;
             if (world_centre(node, &cx, &cy) && world_pos(node, &wx, &wy, &wz))
                 set_world(node, wx + (stockX - cx), wy, wz);

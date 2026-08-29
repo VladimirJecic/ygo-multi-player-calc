@@ -61,9 +61,10 @@ one wins.
 Do this on your own diff **before** you commit, every time. The next agent to open this file
 has to orient fast and must not be led into assuming something that is not true.
 
-1. **Read the diff as a stranger.** Delete any comment that narrates what the code plainly
-   says, or that retells how you found the bug. Keep the ones that record a trap, a measured
-   number, or why the obvious alternative is wrong — those are why this codebase is workable.
+1. **Three sentences, often one.** That is the ceiling for a comment. Delete any that narrates
+   what the code plainly says or retells how you found the bug; keep the ones that record a
+   trap, a measured number, or why the obvious alternative is wrong. The debugging story
+   belongs in the commit message and in `userstories/`, not above the function.
 2. **Say it once.** If a mechanism is written out over the declaration and again over the
    function, keep the copy next to the mechanism and cut the other.
 3. **Name for what a thing is, not how it works.** A helper is named for what it returns.
