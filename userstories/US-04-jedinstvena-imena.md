@@ -45,17 +45,16 @@ Dokaz greške: `reference/screenshots/bug-duplicate-names-5p.png`
       | ZEXAL | 3.19 x 0.28 | 5.14 x 0.96 | 0.29 | presitno |
       | VRAINS | 2.22 x 0.24 | 5.11 x 1.11 | 0.22 | **ne vidi se** |
 
-      Za ZEXAL i VRAINS odnos objašnjava simptom, pa v231 uvodi donju granicu čitljivosti:
-      veličina slova natpisa se meri prema brojaču na istoj tabli i podiže na 0.40 njegove
-      veličine samo ako je ispod 0.34. Dizajni kod kojih je natpis već dovoljno veliki se ne
-      diraju. **ARC-V time nije objašnjen** — odnos mu je isti kao kod Duel Monsters-a koji
-      radi — pa je za njega dodata dijagnostika `cap where:` koja ispisuje ime čvora, njegov
-      pravougaonik i položaj u svetu, po panelu.
+      Za ZEXAL i VRAINS odnos objašnjava simptom. Pokušana popravka (podizanje veličine slova
+      na 0.40 brojačeve kad padne ispod 0.34) je **povučena** — vidi "Treperenje" ispod.
+      **ARC-V odnosom nije objašnjen** — isti mu je kao kod Duel Monsters-a koji radi — pa je
+      ostavljena samo dijagnostika `cap where:`, koja po panelu ispisuje ime čvora, njegov
+      pravougaonik, položaj u svetu i veličinu slova naspram brojača.
 - [ ] **Na ZEXAL-u prvo slovo imena je krupnije i drugog oblika** ("Laza" na donjem levom
       panelu). Nije objašnjeno; verovatno zaostala kopija ispod naše, pošto ZEXAL drži natpis u
       dva čvora (`TextPlayer` i `TextPlayer/01`). Čeka log.
 - [ ] **Na Standardu pored imena stoji odsečen ostatak igrine oznake** ("H", "Vl", "Al", "La").
-      *Popravljeno u v231, čeka proveru.* Korisnikova dijagnoza (2026-08-29): "ako postoji jedno
+      *Dijagnostikovano, popravka POVUČENA — vidi "Treperenje" ispod.* Korisnikova dijagnoza (2026-08-29): "ako postoji jedno
       polje u koje upišeš slova po kalkulatoru... trebalo bi da se prikaže samo jednom, a to što
       se prikazuje drugi put znači da postoji referenca na to polje negde drugde." Referenca
       postoji i zove se `UISystem.LocalizeText.BindingText` — vezana za `Duel.Player.Name`, pa
@@ -106,3 +105,34 @@ Kompletna procedura (kako se pronalazi pravi čvor diff-om dva stock panela, za�
 
 Predlog prethodnog agenta za ovaj kriterijum: `docs/STRATEGY-unique-names.md` — tretirati kao
 predlog, ne kao utvrđeno stanje.
+
+### Treperenje — regresija koju smo sami uveli (prijava korisnika, 2026-08-29)
+
+> "kada uđem u aplikaciju ona tri ekrana zajedno sa druga dva svi trepere i posle nekog vremena
+> ova tri skroz izgube tekst a ona dva nastavljaju da trepere... zatim sam ušao drugi put i
+> tada sam opet video treperenje... a zatim sam treći put ušao i tad su imena bila zamrznuta,
+> izgledala baš kako treba... kao da se baca kockica"
+
+Treperenje znači da se u jednom frejmu ne vidi nijedno ime, a u sledećem svih pet. Nije
+postojalo pre nekoliko verzija — uveli smo ga izmenama rađenim zbog VRAINS-a.
+
+**Sve neproverene izmene su vraćene** na stanje builda koji je korisnik fotografisao
+(`reference/screenshots/v231-*.png`): povučena je donja granica čitljivosti, povučeno je
+proširenje brisanja na sopstveni natpis, i povučeno je stalno ponavljanje natpisa na panelima
+1 i 2. Ostala je samo dijagnostika, koja ništa ne crta.
+
+Razlog za povlačenje umesto još jedne popravke: nijedna od te tri izmene nije bila proverena na
+telefonu (bežično otklanjanje grešaka je bilo isključeno), a korisnik je prijavio regresiju na
+glavnim ekranima. Sledeći korak je **log, ne još jedna pretpostavka** — treperenje ostavlja
+tragove koje mod već ispisuje:
+
+| Linija | Šta znači |
+|---|---|
+| `cap: rejected - the search landed on LifePoints` koja se ponavlja | pretraga natpisa svaki frejm sleti na brojač, resetuje se i pokušava ponovo — to je "bacanje kockice" |
+| `cap: len=…` sa različitim vrednostima kroz vreme | pretraga se ne slaže sama sa sobom između frejmova |
+| `cap where:` sa različitim čvorom po ulasku | natpis završava u različitim čvorovima pri hladnom i toplom ulasku |
+
+Sumnja: `panel_ready()` propušta pretragu pre nego što je skin popunio panel, a kad se dva
+brojača razlikuju (7500 naspram 8000 na snimcima) diff sleti na `LifePoints`,
+`caption_is_the_score()` ga odbije i sve se resetuje — pa naizmenično ima i nema natpisa.
+Treći ulazak "zamrzne" jer se zatekne slučaj u kom se brojači poklapaju.
