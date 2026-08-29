@@ -9,6 +9,7 @@
 Dopunjeno odgovorima na pitanja (2026-08-29):
 > **Raspored:** dva gore, treći dole u sredini.
 > **Preklapanje sa donjim redom dugmadi:** podigni ceo blok, zadrži veličinu panela.
+> **Poravnanje:** "treba biti handlovano za svaki posebno".
 
 ## Šta je u obimu
 
@@ -18,8 +19,11 @@ Dopunjeno odgovorima na pitanja (2026-08-29):
 - [ ] Dva panela gore, treći dole, **vodoravno centriran** između njih.
 - [ ] Gornja dva su simetrična u odnosu na sredinu ekrana — leva i desna ivica jednako
       udaljene od ivica ekrana.
-- [ ] **Treći panel je stvarno na sredini**, mereno po tabli koju skin crta, ne po
-      pravougaoniku. Ovo je uslov koji se najlakše previdi jer razlika ume da bude mala.
+- [ ] **Svaki panel se poravnava zasebno**, po tabli koju skin crta na njemu samom, ne po
+      pravougaoniku i ne pod pretpostavkom da se pomeraj levog i desnog međusobno poništava.
+      Tri panela znače tri merenja, ne jedno pravilo.
+- [ ] **Treći panel je stvarno na sredini** po toj meri. Ovo je uslov koji se najlakše
+      previdi jer razlika ume da bude mala.
 - [ ] Ceo blok je vertikalno centriran: prazan prostor iznad gornjeg reda i ispod trećeg
       panela je približno jednak.
 - [ ] Nijedan panel se ne preklapa sa donjim redom dugmadi (Log, Reset, Undo, Tools),
@@ -71,6 +75,12 @@ Kod pet igrača usamljeni panel jeste indeks 4. **Kod tri igrača je indeks 2**,
 nikad ne odradi svoje i panel ostane pomeren za onoliko koliko je tabla pomerena u svom
 pravougaoniku. Uslov treba da bude „ovo je usamljeni panel", ne „ovo je peti panel" — što je
 isti oblik greške kao redni broj reda u US-06.
+
+Ali popravljanje samo tog uslova nije ono što je traženo. Ispravka se sada radi **jednom, za
+jedan panel**, uz pretpostavku da se kod para levo-desno pomeraj table poništi jer je prefab
+ogledan. Traženo je da se **svaki panel poravna zasebno**, po svojoj tabli. To ujedno rešava i
+razlike među dizajnima bez posebnog slučaja po skinu: mera dolazi iz onoga što je nacrtano, a
+ne iz formule po skinu (pravilo R2 u `docs/DESIGN.md` — meri, ne predviđaj).
 
 Za vertikalno centriranje i za razmak od donjeg reda dugmadi: `topMargin` gura ceo blok
 naniže, a `cy` određuje razmak redova. Meri se prema `LifeArea`, nikad u pikselima — pravilo
