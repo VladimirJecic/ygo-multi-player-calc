@@ -663,6 +663,7 @@ static int g_txtPath[CAPMAX];
 static int g_txtLen = -1;
 static int g_difPath[CAPMAX];
 static int g_difLen = -1;
+static int g_difIsNumber;      /* written whenever g_difLen is */
 
 /* node names the skins use for the bit that carries the duelist's name */
 static int name_ish(const char *n) {
@@ -697,6 +698,11 @@ static int diff_caption(void *a, void *b, int depth, int len) {
                 for (int k = 0; k < len; k++) g_difPath[k] = g_capPath[k];
                 g_difLen = len;
                 name_path_of(a, len, g_difName, sizeof g_difName);
+                /* Bare digits mean a caption split in two, the wording in the
+                   parent and only the number here. */
+                g_difIsNumber = 1;
+                for (const char *q = ta; *q; q++)
+                    if (!((*q >= '0' && *q <= '9') || *q == ' ')) { g_difIsNumber = 0; break; }
             }
         }
         /* Duel Monsters and VRAINS draw the caption as artwork and leave the
@@ -759,7 +765,11 @@ static int diff_caption(void *a, void *b, int depth, int len) {
            Preferring the blank field instead was wrong: on Standard it sits
            behind the panel's marker, so the name was written somewhere you
            could not read it. */
-        if (g_difLen >= 0) {
+        /* A split caption's number is the wrong half to write a name into: the
+           parent keeps its wording and the two stack up, which is ZEXAL's
+           'DUELIST' sitting on the name.  Swapping a number in place is fine,
+           a name is not - take the blank name field instead when there is one. */
+        if (g_difLen >= 0 && !(g_difIsNumber && g_txtLen >= 0)) {
             for (int k = 0; k < g_difLen; k++) g_capPath[k] = g_difPath[k];
             g_capLen = g_difLen; g_capIsSprite = 0;
             snprintf(g_capName, sizeof g_capName, "%s", g_difName); return 1;

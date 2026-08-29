@@ -146,8 +146,11 @@ Treći ulazak "zamrzne" jer se zatekne slučaj u kom se brojači poklapaju.
 nema precrtavanja, nema odsečene druge kopije, nema treperenja, preimenovanje ostaje posle
 čuvanja. ARC-V u potpunosti zadovoljava ovaj kriterijum — `reference/screenshots/v232-arcv-ok.png`.
 
-**Duel Monsters (3) je pao na v232.** Radio je ranije; sada se igrin natpis `DUELIST 01` i naše
-ime crtaju jedno preko drugog — `reference/screenshots/v232-duelmonsters-overlap.png`.
+**Duel Monsters (3) je pao na v232 i popravljen je u v233.** Igrin natpis `DUELIST 01` se crtao
+preko imena — `reference/screenshots/v232-duelmonsters-overlap.png`. Uzrok: v232 je čvorove
+tražio po imenu lista, a taj skin ima dva čvora zvana `img`
+(`Duelist/Background/line/img` i `Duelist/TextPlayer/img`), pa je mod skrivao ukrasnu liniju
+umesto natpisa. Od v233 se pamti ceo lanac imena od korena panela.
 
 Rešio ih je jedan kvar, ne tri: natpis se pamtio kao **redni broj deteta**, a `label_panel`
 pomera natpis na kraj roditelja, čime prenumeriše svu decu iza njega. Ime je zato svaki frejm
@@ -160,10 +163,12 @@ koliko ima natpis, taman za dva slova. Čvorovi se sada pamte po imenu (`panel_n
 
 Dizajni 6-8. Nisu deo onoga što je ovde prihvaćeno; uzeti u nekom trenutku:
 
-- [ ] **Duel Monsters (3)** — igrin natpis se ne sklanja, pa se `DUELIST 01` i ime preklapaju.
-      Ovo je regresija od v232 i jedina stvar koju v233 dira.
-- [ ] **ZEXAL (6)** — imena se **vide, samo su presitna**. Prazno polje `PlayerName` mu je
-      3.19 x 0.28 naspram brojača 5.14 x 0.96, odnos 0.29, gde je na Standardu 0.40.
+- [ ] **ZEXAL (6)** — isti oblik kvara kao kod Duel Monsters-a: igrina reč i ime se slažu jedno
+      na drugo. Log to kaže jasno — `cap: len=3 ... node '01'`, dakle natpis završava u
+      `Duelist/TextPlayer/01`, brojčanoj polovini podeljenog natpisa, dok roditelj `TextPlayer`
+      zadržava reč `DUELIST`. Prazno `PlayerName` na dubini 2 se nađe pa preskoči. Od v234 se,
+      kada je tekst čvora koji se razlikuje sam broj, bira prazno polje za ime.
+      **Čeka proveru.**
 - [ ] **VRAINS (8)** — nije provereno na v232. Na v231 se ime nije videlo; odnos 0.22,
       najmanji od svih.
 
