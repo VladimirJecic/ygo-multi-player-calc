@@ -8,10 +8,18 @@ a three-way, a five-man table — everyone ends up tracking their own life point
 paper or on a second phone. This mod adds the missing seats to the calculator the
 game already has, keeping its artwork, its animations and its duel log intact.
 
+It installs as **Neuron Lite**, which is the second half of the point. Stock Neuron
+pulls down card-recognition (OCR) and the full card database before it will do
+anything — hundreds of megabytes that a life-point calculator never touches. Stripped
+to what the calculator actually needs, the app went from **699 MB to 190 MB** of
+storage.
+
 ---
 
 ## What it does
 
+- **A calculator that fits on the phone.** No OCR module, no card database — 190 MB
+  where the stock app wants 699 MB.
 - **3, 4 and 5 player layouts** added next to the game's own two-player modes.
   The selection persists between launches.
 - **Per-player names**, including for seats 3–5 that the game has no artwork for.
@@ -21,7 +29,7 @@ game already has, keeping its artwork, its animations and its duel log intact.
   GX, 5D's, ZEXAL, ARC-V and VRAINS. Each is a separate prefab with its own
   proportions, so each has to be checked separately.
 
-Current build: **v234**. See `userstories/` for what is done and what still isn't.
+Current build: **v240**. See `userstories/` for what is done and what still isn't.
 
 ## How it works, briefly
 

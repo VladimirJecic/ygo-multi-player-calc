@@ -5,6 +5,18 @@ approach is new — several of the obvious ones have already been tried and reve
 
 ---
 
+## What this was for
+
+Two goals from the start, and the second is easy to forget once the layout work takes over.
+
+**Fit the app on the phone.** Stock Neuron insists on card recognition (OCR) and the whole
+card database before it will run — hundreds of megabytes a life-point calculator never reads.
+Without them the install goes from **699 MB to 190 MB**, which is why the build is called
+**Neuron Lite** on the launcher.
+
+**Seat more than two duelists.** The stock calculator is fixed at two; a Battle Royal or a
+five-man table leaves everyone else on paper.
+
 ## Timeline
 
 | When | What |

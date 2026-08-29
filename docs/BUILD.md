@@ -133,6 +133,16 @@ added to the apk as `classes4.dex`. Native code cannot raise a `Toast` on its ow
 fetches the `Application` via `ActivityThread.currentApplication()` reflection and posts to the
 main looper, swallowing every throwable so a toast can never break the game.
 
+**e. The name on the launcher.** The app installs as **Neuron Lite**. The label is a plain
+entry in the global string pool of `resources.arsc`, so `src/tools/relabel.py` rebuilds that
+pool with the new text and fixes the two enclosing chunk sizes — no apktool round trip, and
+nothing else in the file moves. Verified by resolving `labelRes` (0x7f0c0006) back to string
+index 19.
+
+Growing `resources.arsc` is safe here even though it must stay 4-byte aligned: it is the third
+zip entry, so its own offset does not move, and every entry after it is deflated and has no
+alignment requirement. `mkapk.py` keeps it **Stored**, which Android 11+ requires.
+
 **d. Restored asset bundles.** The modded apk had been built from a merged base+split that had
 lost **977** Unity asset bundles, which is why ARC-V and VRAINS drew their LP panels as blank
 white boxes. `src/tools/addassets.py ours.apk donor.apk out.apk` copies every entry of `ours`
@@ -158,7 +168,7 @@ overwrite it, and never sign with a fresh key "just to test".
 ## 5. Verifying a build
 
 ```sh
-unzip -l apk/dist/neuron-mod-v234.apk | grep -E 'classes|neuronmod'
+unzip -l apk/dist/neuron-mod-v240.apk | grep -E 'classes|neuronmod'
 ```
 
 Expect `classes.dex`, `classes2.dex`, `classes3.dex`, `classes4.dex` and
