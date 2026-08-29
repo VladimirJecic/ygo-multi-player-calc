@@ -157,9 +157,9 @@ koliko ima natpis, taman za dva slova. Čvorovi se sada pamte po imenu (`panel_n
 
 Dizajni 6-8. Nisu deo onoga što je ovde prihvaćeno; uzeti u nekom trenutku:
 
-- [ ] **ZEXAL (6)** — ime se vidi ali je presitno, i prvo slovo je krupnije i drugog oblika.
-      Prazno polje `PlayerName` mu je 3.19 x 0.28 naspram brojača 5.14 x 0.96, odnos 0.29,
-      gde je na Standardu 0.40.
+- [ ] **ZEXAL (6)** — imena se ne vide. Na v231 su se videla, presitna i sa krupnijim prvim
+      slovom; od v232 ih nema. Prazno polje `PlayerName` mu je 3.19 x 0.28 naspram brojača
+      5.14 x 0.96, odnos 0.29, gde je na Standardu 0.40.
 - [ ] **ARC-V (7)** — imena se uopšte ne vide. Odnos veličine mu je 0.46, isti kao kod Duel
       Monsters-a koji radi, pa to nije objašnjenje. Nije dijagnostikovano.
 - [ ] **VRAINS (8)** — imena se uopšte ne vide. Odnos 0.22, najmanji od svih.
