@@ -99,10 +99,13 @@ Working: settings rows for 4 and 5 screens, the panel grid on all eight designs,
 counters, per-panel keypad, Reset/Undo, the widened Log dialog, the Log Archives list with
 names and timestamps, and restore-from-log.
 
-**v232 is the first build of this run the user has accepted.** Designs 1-5 — Standard, Simple,
-Duel Monsters, GX, 5D's — are correct: names in place, not struck through, no clipped second
-copy, no flicker, and a rename survives saving. Designs 6-8 (ZEXAL, ARC-V, VRAINS) still show
-the caption too small or not at all; see `userstories/US-04`.
+**v232 is the first build of this run the user has accepted.** Standard (1), Simple (2),
+GX (4), 5D's (5) and ARC-V (7) are correct: names in place, not struck through, no clipped
+second copy, no flicker, and a rename survives saving.
+
+Still open: Duel Monsters (3) draws the stock `DUELIST 01` over the name — a regression at
+v232; ZEXAL (6) shows the name but far too small; VRAINS (8) has not been checked since v231.
+See `userstories/US-04`.
 
 The three defects reported against v230 on 2026-08-29 resolved as follows.
 

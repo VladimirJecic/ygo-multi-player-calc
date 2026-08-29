@@ -1,6 +1,6 @@
 # US-04 — Promena imena olovčicom, bez duplikata
 
-**Status:** radi na dizajnima 1-5, otvoreno na 6-8   **Poslednja provera:** v232 (stabilna)
+**Status:** radi na 1, 2, 4, 5, 7; otvoreno na 3, 6, 8   **Poslednja provera:** v232
 
 ## Kako je zahtev postavljen
 > "korisnik aplikacije na svakom ekranu ima opciju da klikom na olovčicu promeni svoje ime.
@@ -142,9 +142,12 @@ Treći ulazak "zamrzne" jer se zatekne slučaj u kom se brojači poklapaju.
 
 ## Stanje na v232 — potvrdio korisnik 2026-08-29
 
-**Dizajni 1-5 rade: Standard, Simple, Duel Monsters, GX, 5D's.** Imena stoje na svom mestu,
+**Rade: Standard (1), Simple (2), GX (4), 5D's (5) i ARC-V (7).** Imena stoje na svom mestu,
 nema precrtavanja, nema odsečene druge kopije, nema treperenja, preimenovanje ostaje posle
-čuvanja. Ovo je prva stabilna verzija ovog kriterijuma.
+čuvanja. ARC-V u potpunosti zadovoljava ovaj kriterijum — `reference/screenshots/v232-arcv-ok.png`.
+
+**Duel Monsters (3) je pao na v232.** Radio je ranije; sada se igrin natpis `DUELIST 01` i naše
+ime crtaju jedno preko drugog — `reference/screenshots/v232-duelmonsters-overlap.png`.
 
 Rešio ih je jedan kvar, ne tri: natpis se pamtio kao **redni broj deteta**, a `label_panel`
 pomera natpis na kraj roditelja, čime prenumeriše svu decu iza njega. Ime je zato svaki frejm
@@ -157,12 +160,12 @@ koliko ima natpis, taman za dva slova. Čvorovi se sada pamte po imenu (`panel_n
 
 Dizajni 6-8. Nisu deo onoga što je ovde prihvaćeno; uzeti u nekom trenutku:
 
-- [ ] **ZEXAL (6)** — imena se ne vide. Na v231 su se videla, presitna i sa krupnijim prvim
-      slovom; od v232 ih nema. Prazno polje `PlayerName` mu je 3.19 x 0.28 naspram brojača
-      5.14 x 0.96, odnos 0.29, gde je na Standardu 0.40.
-- [ ] **ARC-V (7)** — imena se uopšte ne vide. Odnos veličine mu je 0.46, isti kao kod Duel
-      Monsters-a koji radi, pa to nije objašnjenje. Nije dijagnostikovano.
-- [ ] **VRAINS (8)** — imena se uopšte ne vide. Odnos 0.22, najmanji od svih.
+- [ ] **Duel Monsters (3)** — igrin natpis se ne sklanja, pa se `DUELIST 01` i ime preklapaju.
+      Ovo je regresija od v232 i jedina stvar koju v233 dira.
+- [ ] **ZEXAL (6)** — imena se **vide, samo su presitna**. Prazno polje `PlayerName` mu je
+      3.19 x 0.28 naspram brojača 5.14 x 0.96, odnos 0.29, gde je na Standardu 0.40.
+- [ ] **VRAINS (8)** — nije provereno na v232. Na v231 se ime nije videlo; odnos 0.22,
+      najmanji od svih.
 
 Pokušaj podizanja veličine slova prema brojaču je jednom pisan i povučen jer nije bio proveren.
 Sada se može uraditi kako treba: `scripts/device/logcat.sh` daje `cap where:` liniju sa imenom
