@@ -1,6 +1,6 @@
 # US-06 — Opcija „3 ekrana" u podešavanjima kalkulatora
 
-**Status:** nije potvrđeno      **Implementirano u:** v241
+**Status:** radi      **Poslednja provera:** v241
 
 ## Kako je zahtev postavljen
 > "napisi novi za dodavanje 3 player opcije u calculator settings, ali budi veoma strog sta je

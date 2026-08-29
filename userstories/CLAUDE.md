@@ -45,8 +45,8 @@ gde u kodu ovo živi, i šta je poznato da ume da pukne
 | 03 | Klik na kalkulator otvara tačno tog igrača | radi |
 | 04 | Promena imena olovčicom, bez duplikata | radi na 1-7; ostaje VRAINS (8) |
 | 05 | Log arhive i nastavak duela | radi |
-| 06 | Opcija „3 ekrana" u podešavanjima | nije počelo |
+| 06 | Opcija „3 ekrana" u podešavanjima | radi (v241) |
+| 07 | Izgled kalkulatora sa tri igrača | nije počelo |
 
-Za tri igrača se piše više odvojenih priča, ne jedna: **06** je samo red u podešavanjima, a
-izgled kalkulatora, funkcionalnost (poeni i ime), upis u Log i vraćanje iz Loga dobijaju svaka
-svoju. Kad neka od njih bude naručena, dodaj je ovde.
+Za tri igrača se piše više odvojenih priča, ne jedna: **06** je samo red u podešavanjima, **07**
+samo izgled, a funkcionalnost (poeni i ime), upis u Log i vraćanje iz Loga dobijaju svaka svoju. Kad neka od njih bude naručena, dodaj je ovde.
