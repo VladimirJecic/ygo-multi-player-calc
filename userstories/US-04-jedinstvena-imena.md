@@ -175,3 +175,28 @@ Pokušaj podizanja veličine slova prema brojaču je jednom pisan i povučen jer
 Sada se može uraditi kako treba: `scripts/device/logcat.sh` daje `cap where:` liniju sa imenom
 čvora, njegovim pravougaonikom, položajem i veličinom slova naspram brojača, po panelu - dakle
 prvo pogledati log na ta tri dizajna, pa tek onda menjati kod.
+
+---
+
+## v235 — veći font na ZEXAL-u
+
+Cilj: ime na ZEXAL-u je čitljivo, ali sitno. **Čeka proveru.**
+
+Veličina slova se ne bira konstantom nego se meri prema brojaču na istoj tabli, i podiže se
+samo ispod onoga na čemu već stoje dizajni koji se dobro čitaju:
+
+| dizajn | font natpisa | font brojača | odnos | ishod |
+|---|---|---|---|---|
+| ARC-V | 50.0 | 90.0 | 0.56 | ne dira se |
+| Standard | 44.8 | 90.0 | 0.50 | ne dira se |
+| Duel Monsters | 40.0 | 128.0 | 0.31 | ne dira se |
+| ZEXAL | nepoznato | — | — | podiže se ako je ispod 0.30 |
+
+Prag je 0.30, cilj 0.38. Namerno je ispod Duel Monsters-ovih 0.31, da dizajn koji korisnik
+već prihvata ostane netaknut. **ZEXAL-ov broj još nije izmeren** — dijagnostika je do v234
+imala globalni budžet linija, pa ga je dizajn pre njega trošio i za ZEXAL nije ostajalo ništa.
+Od v235 je budžet po dizajnu, pa sledeći ulazak na ZEXAL daje tačan broj u liniji
+`cap where: ... fs X vs score Y`, a `cap size: X -> Y` se ispisuje ako je podizanje odrađeno.
+
+Ako se ispostavi da je ZEXAL iznad 0.30, podizanje neće ni krenuti i prag se podešava po
+izmerenom broju — ne pogađanjem.

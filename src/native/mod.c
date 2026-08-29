@@ -664,6 +664,7 @@ static int g_txtLen = -1;
 static int g_difPath[CAPMAX];
 static int g_difLen = -1;
 static int g_difIsNumber;      /* written whenever g_difLen is */
+static int g_capSaid;          /* diagnostic line budget, reset per design */
 
 /* node names the skins use for the bit that carries the duelist's name */
 static int name_ish(const char *n) {
@@ -1178,6 +1179,31 @@ static void label_panel(void *panelTf, const char *text) {
                 }
             }
         }
+        {   /* Lift a caption that is far smaller than the score beside it.
+               Measured against the panel's own score, never a constant, and
+               only below what the designs that read well already sit at:
+               Standard 0.50, ARC-V 0.56, Duel Monsters 0.31. */
+            void *lp = find_deep(panelTf, "LifePoints", 4);
+            void *lc = lp ? get_comp(lp, k_TMP) : NULL;
+            void *cc = get_comp(node, k_TMP);
+            if (lc && cc && m_tmp_getFs && m_tmp_setFs && m_tmp_autosize) {
+                void *rl = inv(m_tmp_getFs, lc, NULL);
+                void *rc = inv(m_tmp_getFs, cc, NULL);
+                if (rl && rc) {
+                    float lpfs = *(float *)il2cpp_object_unbox(rl);
+                    float cfs  = *(float *)il2cpp_object_unbox(rc);
+                    if (lpfs > 1.0f && cfs > 0.0f && cfs < lpfs * 0.30f) {
+                        float want = lpfs * 0.38f;
+                        uint8_t off = 0;              /* auto-sizing would undo this */
+                        void *a[1] = { &off };
+                        inv(m_tmp_autosize, cc, a);
+                        a[0] = &want; inv(m_tmp_setFs, cc, a);
+                        if (g_capSaid < 20) { g_capSaid++;
+                            nlog("cap size: %.1f -> %.1f (score %.1f)", cfs, want, lpfs); }
+                    }
+                }
+            }
+        }
         {   /* Draw it last.  On VRAINS the name field sits earlier in the
                parent than the bar it belongs to, so the bar was painted over
                the name: the field was active, opaque and in the right place,
@@ -1271,9 +1297,9 @@ static void label_panel(void *panelTf, const char *text) {
         }
         {   /* Diagnostics only.  A screenshot cannot separate "off the plate"
                from "too small to see" from "written into a node the skin never
-               draws", so print all three.  Capped: this runs every frame. */
-            static int said;
-            if (said < 20) { said++;
+               draws", so print all three.  Capped per design, since this runs
+               every frame and a design change has to get its own lines. */
+            if (g_capSaid < 20) { g_capSaid++;
                 char nm[64] = "?";
                 float w = 0, h = 0, wcx = 0, wcy = 0, cfs = 0, lpfs = 0;
                 tf_name(node, nm, sizeof nm);
@@ -2594,6 +2620,7 @@ static void build_four_player_layout(void *self) {
        the numbers to appear and then decides. */
     g_capLen = -1; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
     g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
+    g_capSaid = 0;
     { static int once; if (!once) { once = 1;
         nlog("--- panel diff (Life01 vs Life02) ---");
         dump_panel_diff(panels[0], panels[1], 5, ""); } }
@@ -2726,6 +2753,7 @@ static void mod_teardown(void *self) {
     memset(g_panel, 0, sizeof g_panel);
     g_np = 0; g_psettle = 0; g_labelled = 0; g_capLen = -1; g_capIsSprite = 0; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
     g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
+    g_capSaid = 0;
     g_row = NULL; g_settle = 0; g_wrappedArea = NULL; g_stableN = 0; g_timerFix = 0.0f; g_rowFix = 0.0f;
     nlog("teardown: screen handed back in stock shape");
 }
@@ -2762,11 +2790,13 @@ static void settle_panels(void) {
             if (!panel_ready(g_panel[0]) || !panel_ready(g_panel[1])) return;
             g_capLen = -1; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
     g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
+    g_capSaid = 0;
             diff_caption(g_panel[0], g_panel[1], 6, 0);
             if (caption_is_the_score(g_panel[0])) {
                 nlog("cap: rejected - the search landed on LifePoints");
                 g_capLen = -1; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
     g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
+    g_capSaid = 0;
                 return;
             }
         }
