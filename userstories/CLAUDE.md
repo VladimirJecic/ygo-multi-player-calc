@@ -38,10 +38,15 @@ gde u kodu ovo živi, i šta je poznato da ume da pukne
 
 ## Pregled
 
-| # | Priča | Status na v230 |
+| # | Priča | Status na v240 |
 |---|---|---|
 | 01 | Izbor broja ekrana u podešavanjima | radi |
-| 02 | Pet kalkulatora, pravilno raspoređenih | delimično — 3 igrača nije centrirano |
+| 02 | Pet kalkulatora, pravilno raspoređenih | delimično — raspored za 3 igrača nije potvrđen |
 | 03 | Klik na kalkulator otvara tačno tog igrača | radi |
-| 04 | Promena imena olovčicom, bez duplikata | ne radi — precrtana imena; VRAINS ne prima ime |
+| 04 | Promena imena olovčicom, bez duplikata | radi na 1-7; ostaje VRAINS (8) |
 | 05 | Log arhive i nastavak duela | radi |
+| 06 | Opcija „3 ekrana" u podešavanjima | nije počelo |
+
+Za tri igrača se piše više odvojenih priča, ne jedna: **06** je samo red u podešavanjima, a
+izgled kalkulatora, funkcionalnost (poeni i ime), upis u Log i vraćanje iz Loga dobijaju svaka
+svoju. Kad neka od njih bude naručena, dodaj je ovde.
