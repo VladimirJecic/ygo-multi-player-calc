@@ -1176,28 +1176,46 @@ static void label_panel(void *panelTf, const char *text) {
                 if (!digits && cur[0]) set_tmp(par, "");
             }
         }
-        {   /* The game paints its own two duelist names onto the panels from
-               StartDuel.DuelistName1/2, into a narrow field of its own, and the
-               clones inherit it - so every panel carried a clipped second copy
-               ('Vl' beside 'Vlada').  Wipe any text in this panel that is one of
-               the game's two names, except the caption we just wrote. */
+        {   /* One name per plate, and this is the field that owns it.
+
+               A plate can end up showing the same name twice.  The game paints
+               its own two duelists from StartDuel.DuelistName1/2 into a narrow
+               field of its own, and that field carries a BindingText bound to
+               Duel.Player.Name, so it repaints itself from the model whatever we
+               do to the caption.  On Standard that field is Duelist/Text_obj,
+               0.56 units wide against the caption's 3.76 - wide enough for two
+               glyphs - which is where the 'H' beside 'Hanaaaa' and the 'Vl'
+               beside 'Vlada' come from.
+
+               Matching only the game's two names was not enough.  On the clones
+               that field holds *that panel's own* name, not duelist 1's or 2's,
+               so 'Laza' on panel 3 matched neither and the clipped copy stayed.
+               Match the caption we just wrote as well.
+
+               set_tmp strips the BindingText before clearing, so the field
+               cannot repaint itself from the model afterwards.
+
+               The caption's own subtree is skipped whole, not just its root: a
+               skin stacks a shadow copy of the caption underneath it holding the
+               same string, and that shadow is not a duplicate - it is what gives
+               the caption its outline. */
             char g1[NAMEMAX] = "", g2[NAMEMAX] = "";
             void *s1 = name_get(0), *s2 = name_get(1);
             if (s1) cs_str(s1, g1, sizeof g1);
             if (s2) cs_str(s2, g2, sizeof g2);
-            if (g1[0] || g2[0]) {
+            if (g1[0] || g2[0] || text[0]) {
                 void *stack[24]; int sp = 0; stack[sp++] = panelTf;
                 while (sp) {
                     void *t = stack[--sp];
-                    if (t != node) {
-                        void *tc = get_comp(t, k_TMP);
-                        if (tc && m_get_text) {
-                            char cur2[96] = "";
-                            cs_str(inv(m_get_text, tc, NULL), cur2, sizeof cur2);
-                            if (cur2[0] && ((g1[0] && !strcmp(cur2, g1)) ||
-                                            (g2[0] && !strcmp(cur2, g2))))
-                                set_tmp(t, "");
-                        }
+                    if (t == node) continue;          /* ours, shadow and all */
+                    void *tc = get_comp(t, k_TMP);
+                    if (tc && m_get_text) {
+                        char cur2[96] = "";
+                        cs_str(inv(m_get_text, tc, NULL), cur2, sizeof cur2);
+                        if (cur2[0] && ((g1[0] && !strcmp(cur2, g1)) ||
+                                        (g2[0] && !strcmp(cur2, g2)) ||
+                                        (text[0] && !strcmp(cur2, text))))
+                            set_tmp(t, "");
                     }
                     for (int i = 0, n = tf_children(t); i < n && sp < 24; i++)
                         stack[sp++] = tf_child(t, i);
@@ -2729,7 +2747,18 @@ static void settle_panels(void) {
        Monsters came up with its prefab's own DUELIST 01 on every panel. */
     /* Re-assert while the screen settles: the game re-draws its own two panels
        from its own state, and a caption written once was put back. */
-    if ((!g_labelled || g_psettle > 0) && g_np) {
+    /* The game keeps repainting its own two panels.
+
+       Everything the mod draws on panels 3-5 stays put, because game code does
+       not know those panels exist.  Panels 1 and 2 it does own, and it rewrites
+       their caption from its own state on its own schedule - so a name written
+       into them held only for as long as the settle window kept re-asserting it,
+       and then the game put its own text back.  That is why renaming duelist 1
+       or 2 made the name vanish on save, and why editing the same field a second
+       time brought it back: the rename reopens the settle window for another 30
+       frames.  Re-assert those two for as long as the screen is up. */
+    const int reassert = g_np && (g_pname[0][0] || g_pname[1][0]);
+    if ((!g_labelled || g_psettle > 0 || reassert) && g_np) {
         if (g_capLen < 0) {
             if (!panel_ready(g_panel[0]) || !panel_ready(g_panel[1])) return;
             g_capLen = -1; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
@@ -2757,6 +2786,9 @@ static void settle_panels(void) {
             void *srcTmp  = srcNode && k_TMP ? get_comp(srcNode, k_TMP) : NULL;
             if (srcTmp && m_get_text) cs_str(inv(m_get_text, srcTmp, NULL), src, sizeof src);
             for (int i = 0; i < g_np; i++) {
+                /* Outside the settle window only the game's own two are still
+                   being repainted, so only those are worth redoing every frame. */
+                if (g_labelled && g_psettle == 0 && i >= 2) continue;
                 char cap[64];
                 if (g_pname[i][0]) snprintf(cap, sizeof cap, "%s", g_pname[i]);
                 else if (i >= 2)   caption_from(src, i + 1, cap, sizeof cap);

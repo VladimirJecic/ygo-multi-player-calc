@@ -55,8 +55,24 @@ Dokaz greške: `reference/screenshots/bug-duplicate-names-5p.png`
       panelu). Nije objašnjeno; verovatno zaostala kopija ispod naše, pošto ZEXAL drži natpis u
       dva čvora (`TextPlayer` i `TextPlayer/01`). Čeka log.
 - [ ] **Na Standardu pored imena stoji odsečen ostatak igrine oznake** ("H", "Vl", "Al", "La").
-      Vidi se na `v231-*` snimcima; brisanje koje to treba da počisti poredi ceo string sa
-      igrina dva imena, pa odsečenu kopiju ne prepozna.
+      *Popravljeno u v231, čeka proveru.* Korisnikova dijagnoza (2026-08-29): "ako postoji jedno
+      polje u koje upišeš slova po kalkulatoru... trebalo bi da se prikaže samo jednom, a to što
+      se prikazuje drugi put znači da postoji referenca na to polje negde drugde." Referenca
+      postoji i zove se `UISystem.LocalizeText.BindingText` — vezana za `Duel.Player.Name`, pa
+      se polje samo prepisuje iz modela. Na Standardu je to `Duelist/Text_obj`, 0.56 jedinica
+      široko naspram 3.76 koliko ima natpis — taman za dva slova, odatle "H" i "Vl".
+      Brisanje je poredilo samo sa igrina dva imena (`DuelistName1/2`), a na klonovima to polje
+      drži **ime tog panela**, pa se "Laza" na trećem panelu nije poklopilo ni sa jednim i
+      kopija je ostajala. Sada se poredi i sa natpisom koji smo upravo upisali. `set_tmp` pre
+      brisanja skida `BindingText`, pa se polje ne može ponovo popuniti iz modela.
+- [ ] **Na Standardu ime nestaje kad se sačuva, za igrače 1 i 2.** *Popravljeno u v231, čeka
+      proveru.* Korisnikov test: preimenovao gornje desno polje u "Goran", tekst je po čuvanju
+      nestao; isto se posle desilo gornjem levom; kad je isto polje izmenio **drugi put**, ime
+      se pojavilo. Igra ne zna da paneli 3-5 postoje, pa tamo ono što upišemo ostaje. Panele 1 i
+      2 igra drži i prepisuje njihov natpis iz svog stanja, a mod je natpis ponavljao samo
+      dok traje prozor smirivanja — pa ga je igra vratila na svoje čim se prozor zatvori.
+      Drugi pokušaj radi zato što preimenovanje otvori prozor na još 30 frejmova. Sada se
+      paneli 1 i 2 ponavljaju sve dok je ekran otvoren.
 - [ ] **Na VRAINS dizajnu ime uopšte ne može da se postavi.** *I dalje otvoreno.* Čitanje koda
       ovo nije rešilo: putanje do natpisa se resetuju pri svakoj promeni dizajna, pa zastarela
       putanja otpada, a na papiru VRAINS treba da nađe `Duelist/PlayerName` i da proradi.

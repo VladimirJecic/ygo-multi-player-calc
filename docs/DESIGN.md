@@ -155,6 +155,21 @@ prefab showing different captions, so whatever differs between them *is* the cap
 - The localiser fills captions a frame or two late, so **re-run the diff each frame during the
   settle burst**, not once at build time. `panel_ready()` gates it; `caption_is_the_score()`
   stops it landing on the life total.
+- **Re-assert duelist 1 and 2 for as long as the screen is up, not just while it settles.**
+  Game code owns those two panels and repaints their caption from its own state whenever it
+  likes; it has never heard of panels 3-5, so those stay put once written. A name written into
+  panel 1 or 2 during the settle window is put back by the game as soon as the window closes —
+  the name appears to vanish the moment you save it, then comes back if you edit the same field
+  again, because a rename reopens the window for another 30 frames.
+- **One field owns the name; silence every other copy on the plate.** A skin keeps a second,
+  much narrower name field with a `UISystem.LocalizeText.BindingText` bound to
+  `Duel.Player.Name`, so it repaints itself from the model no matter what you do to the caption
+  — Standard's `Duelist/Text_obj` is 0.56 units wide against the caption's 3.76, which is
+  exactly wide enough to show `Vl` of `Vlada`. Clearing it through `set_tmp` strips the binding
+  first, so it cannot come back. Match it on **the caption you just wrote** as well as on
+  `DuelistName1/2`: on a clone that field holds *that panel's* name, which is neither of the
+  game's two. Skip the caption's own subtree whole — the shadow copy underneath it holds the
+  same string and is what gives the caption its outline.
 
 ### 3.3 The button row
 
