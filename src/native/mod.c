@@ -2884,8 +2884,9 @@ static void settle_panels(void) {
 
     /* Three panels leave the middle of the bottom row empty, which is exactly
        where the button row lives, so the lone panel lands on top of it.  Raise
-       the block instead of shrinking it: measure the gap above the top panel and
-       the gap between the bottom panel and the buttons, and split the difference.
+       that panel, not the block: the top row has almost nothing to spare above
+       it - 0.74 units against the 2.57 the lone panel was overlapping by on Duel
+       Monsters - so lifting all three took the top row off the screen.
        Measured rather than budgeted, so each skin lands where its own plate is,
        not where a shared formula guesses. */
     if (g_psettle == 90 && g_np == 3 && g_wrappedArea) {
@@ -2901,13 +2902,12 @@ static void settle_panels(void) {
             if (g_row && drawn_box(g_row, &cx, &cy, &w, &hh))
                 floorY = cy + hh * 0.5f + hh * 0.35f;   /* clear of the buttons */
             float lift = ((areaTop - top) - (bot - floorY)) * 0.5f;
-            if (lift > 0.001f || lift < -0.001f) {
-                for (int i = 0; i < 3; i++) {
-                    float sx, sy, sz;
-                    if (world_pos(g_slot[i], &sx, &sy, &sz))
-                        set_world(g_slot[i], sx, sy + lift, sz);
-                }
-                nlog("3P: raised by %.2f (above %.2f, below %.2f)",
+            int lone = lone_panel(3);
+            float sx, sy, sz;
+            if ((lift > 0.001f || lift < -0.001f)
+                && world_pos(g_slot[lone], &sx, &sy, &sz)) {
+                set_world(g_slot[lone], sx, sy + lift, sz);
+                nlog("3P: lone panel raised by %.2f (above %.2f, below %.2f)",
                      lift, areaTop - top, bot - floorY);
             }
         }

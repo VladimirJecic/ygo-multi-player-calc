@@ -1,6 +1,6 @@
 # US-07 — Izgled kalkulatora sa tri igrača
 
-**Status:** nije potvrđeno      **Implementirano u:** v242
+**Status:** Duel Monsters potvrđen; ostalih sedam nije provereno      **Poslednja provera:** v243
 
 ## Kako je zahtev postavljen
 > "On se bavi samo izgledom kalkulatora, i gotov je tek kada su svi ekrani poravnati po sredini
@@ -25,11 +25,11 @@ Dopunjeno odgovorima na pitanja (2026-08-29):
       i onaj koji nije centriran dobija svoje rešenje.
 - [ ] **Treći panel je stvarno na sredini**, mereno po tabli koju skin crta, ne po
       pravougaoniku. Ovo je uslov koji se najlakše previdi jer razlika ume da bude mala.
-- [ ] Ceo blok je vertikalno centriran: prazan prostor iznad gornjeg reda i ispod trećeg
-      panela je približno jednak.
 - [ ] Nijedan panel se ne preklapa sa donjim redom dugmadi (Log, Reset, Undo, Tools),
-      ni sa tajmerom, ni sa X dugmetom gore levo. Blok se za to **podiže**, paneli se ne
-      smanjuju.
+      ni sa tajmerom, ni sa X dugmetom gore levo. Za to se **podiže samo usamljeni panel**,
+      paneli se ne smanjuju.
+- [ ] **Gornji red ostaje tamo gde je bio.** (Ispravka korisnika na v242: podizanje celog
+      bloka je gornji red izbacilo sa ekrana, jer iznad njega ima svega 0.74 jedinice mesta.)
 - [ ] Nijedan panel ne izlazi van ekrana i ne preklapa se sa drugim panelom.
 - [ ] **Sve navedeno na svih osam dizajnova**: Standard, Simple, Duel Monsters, GX, 5D's,
       ZEXAL, ARC-V, VRAINS.
@@ -107,13 +107,29 @@ Dve izmene, obe merene:
 kod tri igrača, ne samo kod pet.
 
 **Vertikalno.** Kod tri igrača sredina donjeg reda ostaje prazna, a tu stoji red dugmadi, pa je
-usamljeni panel sletao na njega. Kad se raspored smiri, mod izmeri gornju prazninu (od vrha
-`LifeArea` do gornje ivice najvišeg panela) i donju (od donje ivice najnižeg panela do vrha
-reda dugmadi, uvećanog za razmak), pa **podigne sva tri slota za pola razlike**. Time se
-istovremeno oslobađa red dugmadi i izjednačava prostor gore i dole, bez smanjivanja panela.
+usamljeni panel sletao na njega. Kad se raspored smiri, mod izmeri gornju prazninu i razmak do
+dugmadi, pa **podigne usamljeni panel**.
+
+Prvi pokušaj (v242) je podigao **sva tri** slota. Na Duel Monsters-u je izmereno
+`raised by 1.66 (above 0.74, below -2.57)` — dakle donji panel je bio 2.57 jedinica u dugmadima,
+a iznad gornjeg reda je bilo svega 0.74 mesta, pa je gornji red izašao sa ekrana. Od v243 se
+pomera samo usamljeni panel, a gornji red ostaje gde je bio.
 
 Ništa od ovoga nije konstanta po skinu: mere dolaze iz `drawn_box()` i iz pravougaonika
 `LifeArea`, pa svaki dizajn sleti tamo gde je njegova tabla, a ne gde bi zajednička formula
 pogodila. **Očekivanje je da ovo neće biti dovoljno za svih osam** — priča i traži da se svaki
 prođe zasebno; log ispisuje `3P: raised by X (above A, below B)` po ulasku, pa se za svaki
 dizajn vidi šta je izmereno.
+
+### Provera po dizajnima
+
+| # | dizajn | v243 |
+|---|---|---|
+| 1 | Standard | nije provereno |
+| 2 | Simple | nije provereno |
+| 3 | Duel Monsters | **u redu** |
+| 4 | GX | nije provereno |
+| 5 | 5D's | nije provereno |
+| 6 | ZEXAL | nije provereno |
+| 7 | ARC-V | nije provereno |
+| 8 | VRAINS | nije provereno |
