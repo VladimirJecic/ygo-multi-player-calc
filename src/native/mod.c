@@ -1116,6 +1116,43 @@ static void label_panel(void *panelTf, const char *text) {
                 }
             }
         }
+        {   /* Legibility floor, measured against the panel's own score.
+
+               The blank name field is sized for whatever the skin had in mind
+               for it, and on some skins that is far smaller than the counter it
+               sits beside: VRAINS leaves a 2.22 x 0.24 box against a 5.11 x 1.11
+               score, ZEXAL 3.19 x 0.28 against 5.14 x 0.96, where Standard's is
+               0.44 against 1.11 and reads fine.  So do not pick a size - read
+               the score's and lift the caption to a fraction of it only when it
+               is below that.  A skin whose caption is already big enough is left
+               exactly as it was.
+
+               Auto-sizing has to go off first: with it on, set_fontSize is
+               overwritten by the fitted size on the next layout pass. */
+            void *lp = find_deep(panelTf, "LifePoints", 4);
+            void *lc = lp ? get_comp(lp, k_TMP) : NULL;
+            void *cc = get_comp(node, k_TMP);
+            if (lc && cc && m_tmp_getFs && m_tmp_setFs && m_tmp_autosize) {
+                void *rl = inv(m_tmp_getFs, lc, NULL);
+                void *rc = inv(m_tmp_getFs, cc, NULL);
+                if (rl && rc) {
+                    float lpfs = *(float *)il2cpp_object_unbox(rl);
+                    float cfs  = *(float *)il2cpp_object_unbox(rc);
+                    float want = lpfs * 0.40f;
+                    static int said;
+                    if (said < 20) { said++;
+                        nlog("cap size: caption %.1f, score %.1f%s", cfs, lpfs,
+                             (lpfs > 1.0f && cfs < lpfs * 0.34f) ? " -> lifting" : "");
+                    }
+                    if (lpfs > 1.0f && cfs < lpfs * 0.34f) {
+                        uint8_t off = 0;
+                        void *a[1] = { &off };
+                        inv(m_tmp_autosize, cc, a);
+                        a[0] = &want; inv(m_tmp_setFs, cc, a);
+                    }
+                }
+            }
+        }
         {   /* Draw it last.  On VRAINS the name field sits earlier in the
                parent than the bar it belongs to, so the bar was painted over
                the name: the field was active, opaque and in the right place,
@@ -1211,6 +1248,22 @@ static void label_panel(void *panelTf, const char *text) {
             float cx, cy, wx, wy, wz;
             if (world_centre(node, &cx, &cy) && world_pos(node, &wx, &wy, &wz))
                 set_world(node, wx + (stockX - cx), wy, wz);
+        }
+        {   /* Where the caption actually ended up.  ARC-V and VRAINS write a
+               name that never appears, and the difference between "written
+               somewhere off the plate", "written at a size you cannot see" and
+               "written into a node the skin never draws" is not visible from a
+               screenshot.  One line per panel per labelling pass, capped. */
+            static int said;
+            if (said < 20) { said++;
+                char nm[64] = "?";
+                float w = 0, h = 0, wcx = 0, wcy = 0;
+                tf_name(node, nm, sizeof nm);
+                rect_size(node, &w, &h);
+                world_centre(node, &wcx, &wcy);
+                nlog("cap where: '%s' rect %.2fx%.2f at %.2f,%.2f text '%s'",
+                     nm, w, h, wcx, wcy, text);
+            }
         }
         {   /* one-shot: what else on this plate is showing text? */
             static int said;

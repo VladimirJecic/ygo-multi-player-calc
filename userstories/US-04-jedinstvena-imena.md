@@ -32,6 +32,31 @@ Dokaz greške: `reference/screenshots/bug-duplicate-names-5p.png`
       poravnanje po y parkiralo ime na crtu. To pomeranje postoji samo zbog VRAINS-a, kod koga
       polje sa imenom visi desno od table, a to je vodoravni problem, pa se sada pomera **samo
       po x**.
+- [ ] **Natpis je pretih na ZEXAL-u, nevidljiv na ARC-V i VRAINS-u.** (prijava korisnika uz
+      snimke, v231, 2026-08-29 — `reference/screenshots/v231-*.png`) Od osam dizajna korisnik
+      je kao ispravne prihvatio Duel Monsters i 5D's. Prazno polje `Duelist/PlayerName` koje
+      skin ostavlja nije svuda iste veličine u odnosu na brojač pored kog stoji:
+
+      | dizajn | PlayerName | LifePoints | odnos | kako izgleda |
+      |---|---|---|---|---|
+      | Standard | 3.76 x 0.44 | 5.11 x 1.11 | 0.40 | čita se |
+      | Duel Monsters | 3.16 x 0.64 | 5.33 x 1.44 | 0.44 | u redu |
+      | ARC-V | 3.44 x 0.56 | 4.78 x 1.22 | 0.46 | **ne vidi se** |
+      | ZEXAL | 3.19 x 0.28 | 5.14 x 0.96 | 0.29 | presitno |
+      | VRAINS | 2.22 x 0.24 | 5.11 x 1.11 | 0.22 | **ne vidi se** |
+
+      Za ZEXAL i VRAINS odnos objašnjava simptom, pa v231 uvodi donju granicu čitljivosti:
+      veličina slova natpisa se meri prema brojaču na istoj tabli i podiže na 0.40 njegove
+      veličine samo ako je ispod 0.34. Dizajni kod kojih je natpis već dovoljno veliki se ne
+      diraju. **ARC-V time nije objašnjen** — odnos mu je isti kao kod Duel Monsters-a koji
+      radi — pa je za njega dodata dijagnostika `cap where:` koja ispisuje ime čvora, njegov
+      pravougaonik i položaj u svetu, po panelu.
+- [ ] **Na ZEXAL-u prvo slovo imena je krupnije i drugog oblika** ("Laza" na donjem levom
+      panelu). Nije objašnjeno; verovatno zaostala kopija ispod naše, pošto ZEXAL drži natpis u
+      dva čvora (`TextPlayer` i `TextPlayer/01`). Čeka log.
+- [ ] **Na Standardu pored imena stoji odsečen ostatak igrine oznake** ("H", "Vl", "Al", "La").
+      Vidi se na `v231-*` snimcima; brisanje koje to treba da počisti poredi ceo string sa
+      igrina dva imena, pa odsečenu kopiju ne prepozna.
 - [ ] **Na VRAINS dizajnu ime uopšte ne može da se postavi.** *I dalje otvoreno.* Čitanje koda
       ovo nije rešilo: putanje do natpisa se resetuju pri svakoj promeni dizajna, pa zastarela
       putanja otpada, a na papiru VRAINS treba da nađe `Duelist/PlayerName` i da proradi.
