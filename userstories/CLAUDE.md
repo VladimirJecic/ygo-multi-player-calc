@@ -47,6 +47,8 @@ gde u kodu ovo živi, i šta je poznato da ume da pukne
 | 05 | Log arhive i nastavak duela (4 i 5) | radi |
 | 06 | Opcija „3 ekrana" u podešavanjima | radi (v241) |
 | 07 | Izgled kalkulatora sa tri igrača | radi (v249) |
+| 08 | Ime igrača na VRAINS dizajnu | nije počelo — počinje istraživanjem |
+| 09 | Brže pokretanje aplikacije | nije počelo, kriterijumi nisu dogovoreni |
 
 **Priče 01-05 su za 4 i 5 ekrana.** Tri igrača su zaseban niz, i piše se više odvojenih
 priča, ne jedna: **06** je samo red u podešavanjima, **07**
