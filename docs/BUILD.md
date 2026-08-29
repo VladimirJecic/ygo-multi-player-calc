@@ -168,7 +168,7 @@ overwrite it, and never sign with a fresh key "just to test".
 ## 5. Verifying a build
 
 ```sh
-unzip -l apk/dist/neuron-mod-v240.apk | grep -E 'classes|neuronmod'
+unzip -l apk/dist/neuron-mod-v249.apk | grep -E 'classes|neuronmod'
 ```
 
 Expect `classes.dex`, `classes2.dex`, `classes3.dex`, `classes4.dex` and

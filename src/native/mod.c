@@ -572,19 +572,6 @@ static void build_four_player_layout(void *self);
    Written as i == 4 before, which is the same thing only when there are five. */
 static int lone_panel(int np) { return np == 5 ? 4 : (np == 3 ? 2 : -1); }
 
-/* Bottom and top edge of a rect in the same space drawn_box reports in. */
-static int rect_world_span(void *tf, float *bottom, float *top) {
-    void *rt = tf ? get_comp(tf, k_RectTransform) : NULL;
-    void *arr = (rt && k_Vector3 && il2cpp_array_new) ? il2cpp_array_new(k_Vector3, 4) : NULL;
-    if (!arr || !m_GetWorldCorners) return 0;
-    void *a[1] = { arr };
-    inv(m_GetWorldCorners, rt, a);
-    float *f = (float *)((char *)arr + 32);
-    float y0 = f[1], y2 = f[7];
-    *bottom = y0 < y2 ? y0 : y2;
-    *top    = y0 < y2 ? y2 : y0;
-    return 1;
-}
 static void wire_panels(void);
 static void dump_texts(void *tf, const char *path, int depth);
 static int tf_visible(void *tf);
@@ -2607,7 +2594,12 @@ static void build_four_player_layout(void *self) {
        they go up: the glow is allowed to spill past its share, only the plate
        has to fit.  Width is what keeps the outer columns clear of the middle
        one, height is what keeps the two rows apart. */
-    const float maxW = vis * (np == 5 ? 0.30f : 0.32f);
+    /* Three take the five-panel budget, not the four-panel one - the same size
+       the 5-screen layout uses.  Simple is trimmed further: its plate is far
+       wider than it is tall (720x296 against Duel Monsters' 860x420), so on the
+       same width it reads as the biggest of the eight. */
+    const int flat = (ph > 1.0f && pw / ph >= 2.2f);   /* Simple, and only Simple today */
+    const float maxW = vis * (np == 4 ? 0.32f : (np == 3 && flat ? 0.26f : 0.30f));
     /* Height budget.  The two skins this binds on are the round ones - 5D's and
        ARC-V - and both were asked to be bigger; the bottom-row clamp below keeps
        them off the edge. */
@@ -2629,8 +2621,8 @@ static void build_four_player_layout(void *self) {
        there is no short side to budget against. */
     const float lim = w * 0.5f - sw * 0.5f - w * 0.035f;
     if (cx > lim) cx = lim;
-    /* Three duelists use the four-screen grid with the bottom row reduced to one
-       panel, centred: two across the top, the third below and between them. */
+    /* Three duelists use the five-screen grid without its bottom row: two across
+       the top and the third in the middle, on the fifth window's own spot. */
     const float tx[5] = { sh - cx, sh + cx, (np == 3) ? sh : sh - cx, sh + cx, sh };
     /* Space the rows off the panel's own height - a fixed fraction left the
        taller skins (GX) touching. */
@@ -2645,8 +2637,17 @@ static void build_four_player_layout(void *self) {
     /* The third panel goes on the bottom row, not at the centre of the screen:
        parked at the centre it left the block hanging from the top with an empty
        band underneath.  On the bottom row it is symmetric about the centre. */
-    const float ty[5] = { cy - topMargin, cy - topMargin,
-                          -cy - topMargin, -cy - topMargin,
+    const float topDrop = (np == 3 && flat) ? h * 0.06f : 0.0f;
+    /* The lone panel goes exactly where the fifth window sits with five screens:
+       the middle.  Simple is the one exception - its plate is wide enough that
+       the middle would run into the top row - so it keeps the bottom row. */
+    const float loneY = (np == 3 && !flat) ? -topMargin : -cy - topMargin;
+    /* A little further down, so the close cross in the top-left corner is not
+       crowded by the first duelist.  Simple sits differently and is left out. */
+    const float blockDrop = (np == 3 && !flat) ? h * 0.020f : 0.0f;
+    const float ty[5] = { cy - topMargin - topDrop - blockDrop,
+                          cy - topMargin - topDrop - blockDrop,
+                          loneY - blockDrop, -cy - topMargin,
                           -topMargin };
 
     g_np = np;
@@ -2882,36 +2883,6 @@ static void settle_panels(void) {
         }
     }
 
-    /* Three panels leave the middle of the bottom row empty, which is exactly
-       where the button row lives, so the lone panel lands on top of it.  Raise
-       that panel, not the block: the top row has almost nothing to spare above
-       it - 0.74 units against the 2.57 the lone panel was overlapping by on Duel
-       Monsters - so lifting all three took the top row off the screen.
-       Measured rather than budgeted, so each skin lands where its own plate is,
-       not where a shared formula guesses. */
-    if (g_psettle == 90 && g_np == 3 && g_wrappedArea) {
-        float top = -1e9f, bot = 1e9f, cx, cy, w, hh;
-        for (int i = 0; i < 3; i++) {
-            if (!drawn_box(g_panel[i], &cx, &cy, &w, &hh)) { top = -1e9f; break; }
-            if (cy + hh * 0.5f > top) top = cy + hh * 0.5f;
-            if (cy - hh * 0.5f < bot) bot = cy - hh * 0.5f;
-        }
-        float areaTop, areaBot;
-        if (top > -1e8f && rect_world_span(g_wrappedArea, &areaBot, &areaTop)) {
-            float floorY = areaBot;
-            if (g_row && drawn_box(g_row, &cx, &cy, &w, &hh))
-                floorY = cy + hh * 0.5f + hh * 0.35f;   /* clear of the buttons */
-            float lift = ((areaTop - top) - (bot - floorY)) * 0.5f;
-            int lone = lone_panel(3);
-            float sx, sy, sz;
-            if ((lift > 0.001f || lift < -0.001f)
-                && world_pos(g_slot[lone], &sx, &sy, &sz)) {
-                set_world(g_slot[lone], sx, sy + lift, sz);
-                nlog("3P: lone panel raised by %.2f (above %.2f, below %.2f)",
-                     lift, areaTop - top, bot - floorY);
-            }
-        }
-    }
 
     if (g_psettle == 60 && g_np) {          /* settled: report what landed where */
         float cx, cy, w, h, rcx, rcy;

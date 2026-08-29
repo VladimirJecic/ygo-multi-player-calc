@@ -1,3 +1,8 @@
+> **Zastarelo.** Ovo je predlog prethodnog agenta, napisan pre nego što je US-04 rešen, i
+> njegova analiza nije bila tačna — govori o XML layoutima kojih u Unity/IL2CPP build-u nema.
+> Kriterijum je rešen sasvim drugačije; kako, piše u `userstories/US-04-jedinstvena-imena-4-5.md`
+> i u `docs/DESIGN.md` §3.2. Zadržano samo kao zapis šta je jednom bilo predloženo.
+
 # Alati za modovanje Yu-Gi-Oh! Neuron aplikacije (Unity / Android)
 
 U ovom okruženju i `ygo-source` folderu koriste se sledeći alati i skripte za disasemblovanje, modovanje, rekompajliranje i potpisivanje APK fajlova:

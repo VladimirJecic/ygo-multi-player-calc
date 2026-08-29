@@ -105,7 +105,7 @@ stayed lit after leaving and re-entering the screen. That is the normal cost of 
 
 ---
 
-## Current state (v234 — stable)
+## Current state (v249 — stable)
 
 Working: settings rows for 4 and 5 screens, the panel grid on all eight designs, independent
 counters, per-panel keypad, Reset/Undo, the widened Log dialog, the Log Archives list with
@@ -117,6 +117,9 @@ second copy, no flicker, and a rename survives saving.
 
 v233 fixed Duel Monsters (3) and v234 ZEXAL (6), both accepted. Seven of the eight designs
 now satisfy US-04; only VRAINS (8) is left, and it has not been looked at since v231.
+
+The three-player calculator (US-06, US-07) landed at v249 and is accepted on all eight
+designs.
 See `userstories/US-04`.
 
 The three defects reported against v230 on 2026-08-29 resolved as follows.
@@ -127,13 +130,11 @@ The three defects reported against v230 on 2026-08-29 resolved as follows.
    on Simple, `Duelist/line` 4.00 x 0.02 on GX) and the stock caption sits on that rule, so
    matching its y parked the name on the line. The nudge exists only because VRAINS anchors its
    name box off the right of the plate — a horizontal problem — so it is now horizontal only.
-2. **3-player mode is not centred**, "return it to the 224 arrangement". — *fixed in v231,
-   unverified.* `ty[2]` was `-topMargin`, putting the third panel at the vertical centre while
-   the other two sat a full row above it: the block hung from the top with an empty band
-   underneath. It now goes on the bottom row at `-cy - topMargin`, like every other count, so
-   the three panels are symmetric about the centre line. **The v224 source no longer exists** —
-   every build before v230 was deleted before this repository was created — so this is a
-   reconstruction of what "centred" means, not a revert.
+2. **3-player mode is not centred**, "return it to the 224 arrangement". — *settled at v249,
+   after several wrong turns.* v231 read this as a pyramid and put the lone panel on the bottom
+   row; what was actually wanted was the five-screen grid without its bottom row, with the lone
+   panel on the spot the fifth window occupies. Three attempts to raise it by measurement were
+   written and then removed in full. See `userstories/US-07`.
 3. **On the VRAINS design, names cannot be set at all.** — *still open.* Static reading did not
    settle it. The caption path globals are reset on every design change, so a stale path is
    ruled out; on paper VRAINS should resolve `g_capLen` to `Duelist/PlayerName` via the

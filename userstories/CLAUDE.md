@@ -38,7 +38,7 @@ gde u kodu ovo živi, i šta je poznato da ume da pukne
 
 ## Pregled
 
-| # | Priča | Status na v240 |
+| # | Priča | Status na v249 |
 |---|---|---|
 | 01 | Izbor 4 ili 5 ekrana u podešavanjima | radi |
 | 02 | Raspored kalkulatora za 4 i 5 igrača | radi |
@@ -46,7 +46,7 @@ gde u kodu ovo živi, i šta je poznato da ume da pukne
 | 04 | Promena imena olovčicom, bez duplikata (4 i 5) | radi na 1-7; ostaje VRAINS (8) |
 | 05 | Log arhive i nastavak duela (4 i 5) | radi |
 | 06 | Opcija „3 ekrana" u podešavanjima | radi (v241) |
-| 07 | Izgled kalkulatora sa tri igrača | nije počelo |
+| 07 | Izgled kalkulatora sa tri igrača | radi (v249) |
 
 **Priče 01-05 su za 4 i 5 ekrana.** Tri igrača su zaseban niz, i piše se više odvojenih
 priča, ne jedna: **06** je samo red u podešavanjima, **07**

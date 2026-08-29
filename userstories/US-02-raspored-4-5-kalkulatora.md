@@ -30,5 +30,4 @@
 konstante su u **`docs/DESIGN.md` §3.1** — tabela pozicija, budžeti širine/visine,
 klampovi i razlog za svaki od njih.
 
-Tri igrača koriste istu mrežu kao četiri, samo je donji red sveden na jedan panel i
-centriran: dva gore, treći dole između njih.
+Za tri igrača vidi **US-07** — oni koriste mrežu za pet bez donjeg reda i nisu deo ove priče.

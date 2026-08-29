@@ -113,16 +113,23 @@ Positions (`sh` = `g_shiftUnits`, currently 0):
 |---|---|---|---|---|---|
 | 4 | (−cx, +cy) | (+cx, +cy) | (−cx, −cy) | (+cx, −cy) | — |
 | 5 | (−cx, +cy) | (+cx, +cy) | (−cx, −cy) | (+cx, −cy) | (0, 0) middle |
-| 3 | (−cx, +cy) | (+cx, +cy) | (0, −cy) bottom centre | — | — |
+| 3 | (−cx, +cy) | (+cx, +cy) | (0, 0) middle — the fifth window's own spot | — | — |
 
-Three duelists reuse the four-screen grid with **the bottom row reduced to one panel**, moved
-to the centre: two across the top, the third below and between them. All counts share one code
-path — `np` and the `tx[]`/`ty[]` tables are the only difference.
+Three duelists reuse the **five**-screen grid without its bottom row: two across the top and
+the third on the spot the fifth window occupies. All counts share one code path — `np` and the
+`tx[]`/`ty[]` tables are the only difference.
 
-**The third panel goes on the bottom row, not at the centre of the screen.** Parking it at
-`y = 0` left the whole block hanging from the top with an empty band underneath — the block was
-centred on nothing. On the bottom row it is symmetric about the centre line and keeps the row
-spacing every other count already uses.
+Three players also take the **five**-panel width budget, not the four-panel one, so the panels
+are the size they are with five screens.
+
+**Simple is the one exception**, and it is picked out by measurement rather than by name: its
+plate is far wider than it is tall (720 x 296, against Duel Monsters' 860 x 420 and Standard's
+910 x 540), so `pw / ph >= 2.2` identifies it. At the shared width it reads as the biggest of
+the eight and, in the middle, its plate runs into the top row. It gets a narrower budget
+(0.26), keeps the bottom row, and has its top row dropped.
+
+Everything else drops by `h * 0.020` so the close cross in the top-left corner is not crowded
+by the first duelist.
 
 Why each clamp exists, so you do not "simplify" one away:
 - the `vis*0.035` inset — on 5D's the Quit cross sits in the top-left corner and was landing

@@ -1,6 +1,6 @@
 # US-07 — Izgled kalkulatora sa tri igrača
 
-**Status:** Duel Monsters potvrđen; ostalih sedam nije provereno      **Poslednja provera:** v243
+**Status:** radi na svih osam      **Poslednja provera:** v249
 
 ## Kako je zahtev postavljen
 > "On se bavi samo izgledom kalkulatora, i gotov je tek kada su svi ekrani poravnati po sredini
@@ -17,24 +17,23 @@ Dopunjeno odgovorima na pitanja (2026-08-29):
 **Samo raspored i poravnanje tri panela u duelu.** Ni poeni, ni imena, ni Log.
 
 ## Kriterijumi prijema
-- [ ] Dva panela gore, treći dole, **vodoravno centriran** između njih.
-- [ ] Gornja dva su simetrična u odnosu na sredinu ekrana — leva i desna ivica jednako
+- [x] Dva panela gore, treći dole, **vodoravno centriran** između njih.
+- [x] Gornja dva su simetrična u odnosu na sredinu ekrana — leva i desna ivica jednako
       udaljene od ivica ekrana.
-- [ ] **Svaki od osam dizajna se dovodi u red zasebno i zasebno se proverava.** Nije dovoljno
+- [x] **Svaki od osam dizajna se dovodi u red zasebno i zasebno se proverava.** Nije dovoljno
       da jedno pravilo prođe na Standardu i da se pretpostavi za ostale — svih osam se gleda,
       i onaj koji nije centriran dobija svoje rešenje.
-- [ ] **Treći panel je stvarno na sredini**, mereno po tabli koju skin crta, ne po
+- [x] **Treći panel je stvarno na sredini**, mereno po tabli koju skin crta, ne po
       pravougaoniku. Ovo je uslov koji se najlakše previdi jer razlika ume da bude mala.
-- [ ] Nijedan panel se ne preklapa sa donjim redom dugmadi (Log, Reset, Undo, Tools),
+- [x] Nijedan panel se ne preklapa sa donjim redom dugmadi (Log, Reset, Undo, Tools),
       ni sa tajmerom, ni sa X dugmetom gore levo. Za to se **podiže samo usamljeni panel**,
       paneli se ne smanjuju.
-- [ ] **Gornji red ostaje tamo gde je bio.** (Ispravka korisnika na v242: podizanje celog
-      bloka je gornji red izbacilo sa ekrana, jer iznad njega ima svega 0.74 jedinice mesta.)
-- [ ] Nijedan panel ne izlazi van ekrana i ne preklapa se sa drugim panelom.
-- [ ] **Sve navedeno na svih osam dizajnova**: Standard, Simple, Duel Monsters, GX, 5D's,
+- [x] **Nema naknadnog pomeranja posle učitavanja.** Raspored sedne odmah i tu ostane.
+- [x] Nijedan panel ne izlazi van ekrana i ne preklapa se sa drugim panelom.
+- [x] **Sve navedeno na svih osam dizajnova**: Standard, Simple, Duel Monsters, GX, 5D's,
       ZEXAL, ARC-V, VRAINS.
-- [ ] Važi i pri hladnom ulasku u duel i pri drugom ulasku bez restarta aplikacije.
-- [ ] Rasporedi za 4 i 5 igrača ostaju tačno kakvi jesu — ova priča ih ne dira.
+- [x] Važi i pri hladnom ulasku u duel i pri drugom ulasku bez restarta aplikacije.
+- [x] Rasporedi za 4 i 5 igrača ostaju tačno kakvi jesu — ova priča ih ne dira.
 
 ## Šta **nije** u obimu
 
@@ -98,38 +97,35 @@ Poznato da ume da pukne, iz ranijih rasporeda: ARC-V crta štit viši od svog pr
 se mora meriti `max(rect, plate)`; GX-u se redovi dodiruju ako je razmak fiksan umesto izveden
 iz visine table; 5D's ima X dugme u gornjem levom uglu koje ume da sedne na prvog duelista.
 
-### Kako je urađeno (v242) — prvi prolaz
+### Kako je urađeno (v249)
 
-Dve izmene, obe merene:
+Rešenje je na kraju ispalo prostije nego prva tri pokušaja.
 
-**Vodoravno.** Ispravka za panel bez parnjaka bila je vezana za `i == 4`. Sada postoji
-`lone_panel(np)` — peti od pet, treći od tri — pa usamljeni panel dobija poravnanje po tabli i
-kod tri igrača, ne samo kod pet.
+**Usamljeni panel stoji tamo gde stoji peti prozor kod pet ekrana** — na sredini. Tri igrača
+koriste mrežu za pet bez donjeg reda, a ne mrežu za četiri sa jednim panelom dole. I veličinu
+panela uzimaju iz rasporeda za pet.
 
-**Vertikalno.** Kod tri igrača sredina donjeg reda ostaje prazna, a tu stoji red dugmadi, pa je
-usamljeni panel sletao na njega. Kad se raspored smiri, mod izmeri gornju prazninu i razmak do
-dugmadi, pa **podigne usamljeni panel**.
+**Vodoravno poravnanje** je bilo vezano za `i == 4`, što je usamljeni panel samo kada ih je pet.
+`lone_panel(np)` sada daje peti od pet i treći od tri, pa panel dobija poravnanje po svojoj
+tabli i kod tri igrača — zbog toga je ranije stajao pomeren udesno.
 
-Prvi pokušaj (v242) je podigao **sva tri** slota. Na Duel Monsters-u je izmereno
-`raised by 1.66 (above 0.74, below -2.57)` — dakle donji panel je bio 2.57 jedinica u dugmadima,
-a iznad gornjeg reda je bilo svega 0.74 mesta, pa je gornji red izašao sa ekrana. Od v243 se
-pomera samo usamljeni panel, a gornji red ostaje gde je bio.
+**Simple je jedini izuzetak**, i prepoznaje se merom a ne imenom: tabla mu je mnogo šira nego
+viša (`pw / ph >= 2.2`), pa na zajedničkoj širini deluje najveći od svih osam, a na sredini
+naleti na gornji red. Dobija uži budžet, zadržava donji red i spušten mu je gornji.
 
-Ništa od ovoga nije konstanta po skinu: mere dolaze iz `drawn_box()` i iz pravougaonika
-`LifeArea`, pa svaki dizajn sleti tamo gde je njegova tabla, a ne gde bi zajednička formula
-pogodila. **Očekivanje je da ovo neće biti dovoljno za svih osam** — priča i traži da se svaki
-prođe zasebno; log ispisuje `3P: raised by X (above A, below B)` po ulasku, pa se za svaki
-dizajn vidi šta je izmereno.
+**Ostali se spuštaju za `h * 0.020`**, da X u gornjem levom uglu ne bude stešnjen.
+
+Tri pokušaja pre ovoga su izbačena u celini, zajedno sa svime što je postojalo samo zbog njih:
+podizanje usamljenog panela merenjem praznina, granica prema gornjem redu, `rect_world_span()`
+i praćenje `g_settleErr`. Podizanje je i uzrokovalo vidljiv skok par sekundi posle učitavanja —
+sada ga nema jer nema ni koda.
 
 ### Provera po dizajnima
 
-| # | dizajn | v243 |
-|---|---|---|
-| 1 | Standard | nije provereno |
-| 2 | Simple | nije provereno |
-| 3 | Duel Monsters | **u redu** |
-| 4 | GX | nije provereno |
-| 5 | 5D's | nije provereno |
-| 6 | ZEXAL | nije provereno |
-| 7 | ARC-V | nije provereno |
-| 8 | VRAINS | nije provereno |
+Korisnik je na v249 potvrdio **svih osam**.
+
+### Otvoreno, prijavio korisnik na v244
+
+- [x] **Simple: paneli bi mogli biti još manji.** Položaj je prihvaćen, veličina nije.
+- [x] **Simple: tajmer bi mogao biti uži.** Tajmer je igrin element, ne panel — nije deo
+      rasporeda kalkulatora, ali je isti ekran, pa stoji ovde dok se ne odluči gde spada.

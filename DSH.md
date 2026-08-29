@@ -31,3 +31,13 @@ U okruženju i `ygo-source` folderu koriste se sledeći alati i skripte:
    - Igrač iz glavnog menija može da vidi istoriju prethodnih duela (`log archives`).
    - Klikom na svaki pojedinačni duel, korisnik se uverava da su **svih pet igrača u logu prisutni**.
    - Klikom na opciju **"restart duel from log"**, igra se nastavlja tačno od mesta gde je taj duel stao.
+
+---
+
+## Pravilo rada (korisnik, 2026-08-29)
+
+**Commit ide isključivo za verziju koju sam testirao i odobrio.**
+
+Redosled je: izmena → build → instalacija → ja pogledam na telefonu → tek kad kažem da je
+dobro, ide commit. Ne commituje se unapred, ne commituje se „pa ćemo ispraviti ako ne valja".
+Istorija treba da sadrži verzije koje rade, a ne pokušaje.

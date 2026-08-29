@@ -1,7 +1,7 @@
 # build/ — compiled output
 
 ```
-libneuronmod.so   the compiled mod, as shipped in v230 (177 KB in the apk)
+libneuronmod.so   the compiled mod, rebuilt by scripts/build.sh on every version
 classes4.dex      neuron.mod.Toaster, compiled once and added to the apk
 java-classes/     the intermediate .class files for Toaster
 ```

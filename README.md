@@ -29,7 +29,7 @@ storage.
   GX, 5D's, ZEXAL, ARC-V and VRAINS. Each is a separate prefab with its own
   proportions, so each has to be checked separately.
 
-Current build: **v240**. See `userstories/` for what is done and what still isn't.
+Current build: **v249**. See `userstories/` for what is done and what still isn't.
 
 ## How it works, briefly
 

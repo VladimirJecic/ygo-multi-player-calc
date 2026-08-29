@@ -5,8 +5,8 @@ stock 2-player life-point calculator into a 3/4/5-player one, and strips the par
 calculator never uses — card recognition and the card database — taking the install from
 699 MB to 190 MB. It shows up on the phone as **Neuron Lite**.
 
-Current build: **v240** — duelist names are correct on seven of the eight designs; only VRAINS
-is left.
+Current build: **v249** — duelist names are correct on seven of the eight designs (only VRAINS
+is left), and the three-player layout is done on all eight.
 
 This file is the entry point. Read it, then read the doc that matches what you are about to do.
 
@@ -53,11 +53,15 @@ one wins.
 4. **The phone is the test harness.** There is no unit test and no emulator. Reach it with
    `scripts/device/shell.sh` (Shizuku, not adb — `docs/BUILD.md` says why). Never ship a fix
    you have not seen run: three unseen builds in a row produced a regression on 2026-08-29.
-5. **One version = one build number, and a build that did not work does not get its own.**
+5. **Commit only what the user has tested and approved.** Change, build, install, hand it to
+   them, wait. A version they have not looked at does not get committed — not to be fixed
+   later, not "so it is not lost". The history is the versions that work, not the attempts.
+   Their words: *"komit ide samo ako je verzija testirana i odobrena"* (2026-08-29, `DSH.md`).
+6. **One version = one build number, and a build that did not work does not get its own.**
    `scripts/build.sh <prev> <new>` takes the previous apk as its base and swaps in the new
    `.so`. Do not skip numbers. Rebuilding the same number in place is correct when the last
    build of it was broken and never accepted — the user asked for it that way.
-6. **Never guess at the game's internals.** Look them up in `reference/il2cpp/classdump.txt`.
+7. **Never guess at the game's internals.** Look them up in `reference/il2cpp/classdump.txt`.
    Methods the game never calls are stripped from the binary and simply do not exist.
 
 ## Before every commit — a cleaning pass
