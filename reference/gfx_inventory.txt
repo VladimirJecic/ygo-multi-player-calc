@@ -1,0 +1,132 @@
+=== standard ===
+4P: fit check rect 910x540, drawn 1048x820
+gfx: /Life01/Background/Image_01              -10.11x6.00   x= -8.42 img
+gfx: /Life01/Background/Image_02              -10.11x6.00   x= -8.42 img
+gfx: /Life01/Background/Image_03              -10.11x6.00   x= -8.42 img
+gfx: /Life01/Background/Image_04              -10.11x6.00   x= -8.42 img
+gfx: /Life01/Background/Image_04_eff          -10.11x6.00   x= -8.42 img
+gfx: /Life01/Background/Image_05              -10.11x6.00   x= -8.42 img
+gfx: /Life01/Background/Image_06_eff          -11.38x9.11   x= -7.79 img
+gfx: /Life01/Background/ImageObj_01            -1.42x0.71   x=-10.70 img
+gfx: /Life01/Background/ImageObj_02            -1.42x0.71   x= -4.30 img
+gfx: /Life01/Duelist/TextPlayer                 3.76x0.44   x= -7.84 text
+gfx: /Life01/Duelist/PlayerName                 3.76x0.44   x= -7.84 hidden
+gfx: /Life01/Duelist/Text_obj                   0.56x0.56   x= -9.99 text
+gfx: /Life01/Duelist/Image                      0.71x0.71   x=-10.50 img
+gfx: /Life01/Duelist/ImageLine                  7.78x0.04   x= -9.86 img
+gfx: /Life01/Duelist/TextLifepoint              4.89x0.31   x= -8.37 text
+gfx: /Life01/LifePoints                         5.11x1.11   x= -8.36 text
+gfx: /Life01/Arrow/ImageArrow01                -0.42x0.87   x= -5.25 img
+gfx: /Life01/Arrow/ImageArrow02                -0.42x0.87   x= -5.47 img
+gfx: /Life01/btn                                9.00x4.89   x= -8.97 img
+4P: panel 910x540 -> scale 0.638 (width 0.638, height 0.650)
+=== simple ===
+4P: fit check rect 720x296, drawn 720x296
+gfx: /Life01/Background/Image_01                8.00x3.29   x= -8.50 img
+gfx: /Life01/Background/Image_02                8.00x2.51   x= -8.50 img
+gfx: /Life01/Background/Image_03               10.11x6.00   x= -8.50 hidden
+gfx: /Life01/Background/Image_04               10.11x6.00   x= -8.50 hidden
+gfx: /Life01/Background/Image_04_eff           10.11x6.00   x= -8.50 hidden
+gfx: /Life01/Background/Image_05               10.11x6.00   x= -8.50 hidden
+gfx: /Life01/Background/Image_06_eff           11.38x9.11   x= -9.12 hidden
+gfx: /Life01/Background/ImageObj_01             1.42x0.71   x= -6.21 hidden
+gfx: /Life01/Background/ImageObj_02             1.42x0.71   x=-12.61 hidden
+gfx: /Life01/LifePoints                         8.00x2.44   x= -8.50 text
+gfx: /Life01/Duelist/TextPlayer                 6.44x0.44   x= -8.83 text
+gfx: /Life01/Duelist/PlayerName                 6.44x0.44   x= -8.83 hidden
+gfx: /Life01/Duelist/TextLifepoint              4.89x0.31   x= -8.45 hidden
+gfx: /Life01/Duelist/Image                      0.13x0.29   x=-12.28 img
+gfx: /Life01/Duelist/ImageLine                  6.71x0.03   x= -8.99 img
+gfx: /Life01/Arrow/ImageArrow01                -0.42x0.71   x= -4.85 img
+gfx: /Life01/Arrow/ImageArrow02                -0.42x0.71   x= -5.03 img
+gfx: /Life01/btn                                7.82x3.29   x= -8.59 img
+4P: panel 720x296 -> scale 0.807 (width 0.807, height 1.186)
+=== duelmonsters ===
+4P: fit check rect 860x420, drawn 860x461
+gfx: /Life01/Image_01                           6.48x4.96   x= -7.71 img
+gfx: /Life01/Image_02                           6.33x4.78   x= -7.60 img
+gfx: /Life01/Duelist/Background/Image_03        6.38x4.89   x= -7.44 img
+gfx: /Life01/Duelist/Background/Image_04        6.38x4.89   x= -7.44 img
+gfx: /Life01/Duelist/Background/Image_05        6.38x4.89   x= -7.44 img
+gfx: /Life01/Duelist/Background/LP              1.89x0.96   x= -8.84 text
+gfx: /Life01/Duelist/Background/line/img        3.16x0.64   x= -6.60 img
+gfx: /Life01/Duelist/TextPlayer/img             3.16x0.64   x= -6.60 img
+gfx: /Life01/Duelist/PlayerName                 3.16x0.64   x= -6.60 hidden
+gfx: /Life01/LifePoints                         5.33x1.44   x= -7.44 text
+gfx: /Life01/btn                                9.56x4.67   x= -8.55 img
+4P: panel 860x420 -> scale 0.675 (width 0.675, height 0.836)
+=== gx ===
+4P: fit check rect 720x340, drawn 770x770
+gfx: /Life01/Background/Image_01                6.56x4.44   x= -8.67 img
+gfx: /Life01/Background/Image_01/gradation      6.56x3.33   x= -8.67 img
+gfx: /Life01/Background/Image_02                6.33x4.22   x= -8.67 img
+gfx: /Life01/Background/Image_02/Image_eff      8.56x8.56   x= -8.67 img
+gfx: /Life01/Background/Image_02/Image_eff_stop  12.05x-1.05  x= -8.67 hidden
+gfx: /Life01/Background/Image_03                6.16x4.04   x= -8.67 img
+gfx: /Life01/Background/Image_03/gradation      6.56x3.33   x= -8.67 img
+gfx: /Life01/LifePoints                         6.00x2.44   x= -8.61 text
+gfx: /Life01/Duelist/TextPlayer                 4.44x1.22   x= -8.05 text
+gfx: /Life01/Duelist/PlayerName                 4.44x1.22   x= -8.05 hidden
+gfx: /Life01/Duelist/line                       4.00x0.02   x= -7.83 img
+gfx: /Life01/Duelist/TextLifepoint              1.78x1.33   x=-10.50 text
+gfx: /Life01/btn                                7.22x3.56   x= -8.89 img
+4P: panel 720x340 -> scale 0.807 (width 0.807, height 1.032)
+=== 5ds ===
+4P: fit check rect 430x430, drawn 616x616
+gfx: /Life01/Image_01                           4.78x4.78   x= -7.37 hidden
+gfx: /Life01/Image_02                           5.89x5.89   x= -7.37 img
+gfx: /Life01/Duelist/gura                       5.33x5.33   x= -7.37 img
+gfx: /Life01/Duelist/gura/05 (1)                6.85x6.85   x= -7.37 img
+gfx: /Life01/Duelist/gura/04 (1)                5.51x5.51   x= -7.37 img
+gfx: /Life01/Duelist/gura/03 (1)                4.43x4.43   x= -7.37 img
+gfx: /Life01/Duelist/gura/02 (1)                2.84x2.84   x= -7.37 img
+gfx: /Life01/Duelist/gura/01 (1)                1.51x1.51   x= -7.37 img
+gfx: /Life01/Duelist/gura/06                    0.18x0.18   x= -7.37 img
+gfx: /Life01/Duelist/gura/05                    0.00x0.00   x= -7.37 img
+gfx: /Life01/Duelist/gura/04                    0.00x0.00   x= -7.37 img
+gfx: /Life01/Duelist/gura/03                    0.00x0.00   x= -7.37 img
+gfx: /Life01/Duelist/gura/02                    0.00x0.00   x= -7.37 img
+gfx: /Life01/Duelist/gura/01                    0.00x0.00   x= -7.37 img
+gfx: /Life01/Duelist/Image_03                   6.44x6.44   x= -7.37 img
+gfx: /Life01/Duelist/LP                         2.84x1.42   x= -7.31 text
+gfx: /Life01/Duelist/TextPlayer                 6.44x1.42   x= -7.37 img
+gfx: /Life01/Duelist/PlayerName                 6.44x1.42   x= -7.37 hidden
+gfx: /Life01/LifePoints                         3.67x1.22   x= -7.37 text
+gfx: /Life01/btn                                4.78x4.78   x= -7.37 img
+4P: panel 430x430 -> scale 0.816 (width 1.351, height 0.816)
+=== zexal ===
+4P: fit check rect 860x400, drawn 921x355
+gfx: /Life01/Duelist/Background                -8.67x3.89   x= -7.45 img
+gfx: /Life01/Duelist/Background/Image          -8.68x2.62   x= -7.44 img
+gfx: /Life01/Duelist/LP                         1.51x0.54   x= -9.58 text
+gfx: /Life01/Duelist/TextPlayer                 3.19x0.28   x= -7.02 text
+gfx: /Life01/Duelist/TextPlayer/01              3.19x0.28   x= -7.02 text
+gfx: /Life01/Duelist/PlayerName                 3.19x0.28   x= -7.02 hidden
+gfx: /Life01/LifePoints                         5.14x0.96   x= -7.78 text
+gfx: /Life01/btn                                9.56x3.67   x= -8.56 img
+4P: panel 860x400 -> scale 0.675 (width 0.675, height 0.877)
+=== arcv ===
+4P: fit check rect 700x400, drawn 768x768
+gfx: /Life01/LifeBG                            -0.05x0.05   x= -8.93 img
+gfx: /Life01/LifeBG/lp_eff1                    -0.86x0.86   x= -8.93 img
+gfx: /Life01/LifeBG/lp_bg                      -8.53x8.53   x= -6.32 img
+gfx: /Life01/LifeBG/lp_bg/lp_eff2              -6.87x6.87   x= -5.77 img
+gfx: /Life01/LifeBG/lp_frame                   -8.53x8.53   x= -6.32 img
+gfx: /Life01/LifeBG/pendulum                   -0.05x0.05   x= -8.93 img
+gfx: /Life01/LifeBG/pendulum/lp_pendulum       -0.55x5.47   x= -8.93 img
+gfx: /Life01/Duelist/TextPlayer                 3.44x0.56   x= -6.33 text
+gfx: /Life01/Duelist/PlayerName                 3.44x0.56   x= -6.33 hidden
+gfx: /Life01/LifePoints                         4.78x1.22   x= -6.35 text
+gfx: /Life01/LP                                 4.78x1.11   x= -5.41 text
+gfx: /Life01/btn                                6.33x5.00   x= -5.74 img
+4P: panel 700x400 -> scale 0.786 (width 0.786, height 0.827)
+=== vrains ===
+4P: fit check rect 860x400, drawn 920x355
+gfx: /Life01/Duelist/Background                 8.67x3.89   x= -7.45 img
+gfx: /Life01/Duelist/TextPlayer                 2.22x0.24   x= -6.61 img
+gfx: /Life01/Duelist/TextPlayer/01              2.22x0.24   x= -6.61 img
+gfx: /Life01/Duelist/PlayerName                 2.22x0.24   x= -6.61 hidden
+gfx: /Life01/LifePoints                         5.11x1.11   x= -6.87 text
+gfx: /Life01/btn                                9.56x3.67   x= -8.56 img
+4P: panel 860x400 -> scale 0.675 (width 0.675, height 0.877)
+GFX DONE

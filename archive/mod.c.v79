@@ -1,0 +1,2101 @@
+// neuronmod - runtime IL2CPP mod for Yu-Gi-Oh! Neuron (jp.konami.YugiohOcgSupports 4.12.0)
+#include <jni.h>
+#include <dlfcn.h>
+#include <link.h>
+#include <pthread.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <android/log.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+
+#define TAG "NEURONMOD"
+#define INSTR_PORT 24243
+
+static JavaVM *g_vm;
+static jclass g_toaster;
+static jmethodID g_show;
+
+/* show an on-screen toast; safe to call from any thread */
+static void toast(const char *msg) {
+    if (!g_vm || !g_toaster || !g_show) return;
+    JNIEnv *env = NULL;
+    int attached = 0;
+    if ((*g_vm)->GetEnv(g_vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK) {
+        if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) != 0) return;
+        attached = 1;
+    }
+    jstring js = (*env)->NewStringUTF(env, msg);
+    (*env)->CallStaticVoidMethod(env, g_toaster, g_show, js, JNI_TRUE);
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    (*env)->DeleteLocalRef(env, js);
+    if (attached) (*g_vm)->DetachCurrentThread(g_vm);
+}
+static void nlog(const char *fmt, ...) {
+    char buf[1024];
+    va_list ap; va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    __android_log_print(ANDROID_LOG_INFO, TAG, "%s", buf);
+}
+
+/* ---------- module base ---------- */
+struct find_ctx { const char *name; uintptr_t base; };
+static int phdr_cb(struct dl_phdr_info *i, size_t s, void *d) {
+    struct find_ctx *c = d;
+    if (i->dlpi_name && strstr(i->dlpi_name, c->name)) { c->base = i->dlpi_addr; return 1; }
+    return 0;
+}
+static uintptr_t module_base(const char *n) {
+    struct find_ctx c = { n, 0 }; dl_iterate_phdr(phdr_cb, &c); return c.base;
+}
+
+/* ---------- il2cpp api ---------- */
+static void *L;
+static void *(*il2cpp_domain_get)(void);
+static void *(*il2cpp_thread_attach)(void *);
+static void *(*il2cpp_domain_assembly_open)(void *, const char *);
+static void *(*il2cpp_assembly_get_image)(void *);
+static void *(*il2cpp_class_from_name)(void *, const char *, const char *);
+static void *(*il2cpp_class_get_method_from_name)(void *, const char *, int);
+static void *(*il2cpp_class_get_fields)(void *, void **);
+static const char *(*il2cpp_field_get_name)(void *);
+static size_t (*il2cpp_field_get_offset)(void *);
+static void *(*il2cpp_field_get_type)(void *);
+static char *(*il2cpp_type_get_name)(void *);
+static void *(*il2cpp_object_get_class)(void *);
+static const char *(*il2cpp_class_get_name)(void *);
+static void *(*il2cpp_runtime_invoke)(void *, void *, void **, void **);
+static void *(*il2cpp_object_unbox)(void *);
+static void *(*il2cpp_class_get_methods)(void *, void **);
+static const char *(*il2cpp_method_get_name)(void *);
+static uint32_t (*il2cpp_method_get_param_count)(void *);
+static void *(*il2cpp_method_get_param)(void *, uint32_t);
+static int (*il2cpp_method_is_generic)(void *);
+static void *(*il2cpp_type_get_object)(void *);
+static void *(*il2cpp_class_get_type)(void *);
+static void *(*il2cpp_string_new)(const char *);
+static void *(*il2cpp_object_new)(void *);
+static void *(*il2cpp_array_new)(void *, uintptr_t);
+static int (*il2cpp_array_length)(void *);
+static size_t (*il2cpp_image_get_class_count)(void *);
+static void *(*il2cpp_image_get_class)(void *, size_t);
+static void *(*il2cpp_class_get_field_from_name)(void *, const char *);
+static void *(*il2cpp_class_get_parent)(void *);
+static uint16_t *(*il2cpp_string_chars)(void *);
+static int (*il2cpp_string_length)(void *);
+
+#define SYM(x) do { *(void **)&x = dlsym(L, #x); if (!x) nlog("MISSING " #x); } while (0)
+
+static uintptr_t g_base;
+static void *g_domain, *g_img_cs, *g_img_core;
+
+static void *cls(void *img, const char *ns, const char *n) {
+    void *k = il2cpp_class_from_name(img, ns, n);
+    if (!k) nlog("class not found: %s.%s", ns, n);
+    return k;
+}
+/* pick the overload whose first parameter type matches, skipping generics */
+static void *meth_sig(void *k, const char *n, int argc, const char *p0type) {
+    void *iter = NULL, *m;
+    while ((m = il2cpp_class_get_methods(k, &iter))) {
+        if (strcmp(il2cpp_method_get_name(m), n)) continue;
+        if ((int)il2cpp_method_get_param_count(m) != argc) continue;
+        if (il2cpp_method_is_generic(m)) continue;
+        if (p0type && argc > 0) {
+            char *tn = il2cpp_type_get_name(il2cpp_method_get_param(m, 0));
+            int ok = tn && !strcmp(tn, p0type);
+            if (!ok) continue;
+        }
+        return m;
+    }
+    nlog("meth_sig miss: %s(%d, %s)", n, argc, p0type ? p0type : "-");
+    return NULL;
+}
+
+static void *meth(void *k, const char *n, int argc) {
+    void *m = k ? il2cpp_class_get_method_from_name(k, n, argc) : NULL;
+    if (!m) nlog("method not found: %s/%d", n, argc);
+    return m;
+}
+static void *inv(void *m, void *obj, void **args) {
+    void *exc = NULL;
+    void *r = il2cpp_runtime_invoke(m, obj, args, &exc);
+    if (exc) nlog("  ! exception invoking method");
+    return r;
+}
+static void cs_str(void *s, char *out, int n) {
+    out[0] = 0;
+    if (!s) { snprintf(out, n, "(null)"); return; }
+    uint16_t *c = il2cpp_string_chars(s);
+    int len = il2cpp_string_length(s), i;
+    if (len > n - 1) len = n - 1;
+    for (i = 0; i < len; i++) out[i] = (c[i] < 128) ? (char)c[i] : '?';
+    out[i] = 0;
+}
+
+/* cached Unity methods */
+static void *m_get_transform, *m_get_childCount, *m_GetChild, *m_get_name, *m_get_gameObject;
+static void *k_Transform, *k_Object, *k_Component, *k_GameObject;
+static void *m_go_get_transform, *m_Instantiate, *m_SetParent, *m_set_name, *m_GetComponent;
+static void *k_TMP, *m_set_text, *m_get_text, *m_GetComponents;
+static void *k_BindingText, *k_Behaviour, *m_set_enabled, *m_Destroy;
+static void *m_get_position, *m_set_position, *m_rt_set_sizeDelta, *m_rt_rect, *m_GO_ctor, *m_AddComponent, *m_set_localPos;
+static void *m_rt_set_anchorMin, *m_rt_set_anchorMax, *m_rt_set_anchoredPos, *m_rt_set_pivot, *m_set_localScale;
+static void *k_RectTransform, *m_rt_anchorMin, *m_rt_anchorMax, *m_rt_anchoredPos, *m_rt_sizeDelta, *m_rt_pivot, *m_localScale;
+static void *m_SetActive, *k_Button, *k_Image, *m_get_sprite, *m_set_sprite;
+static void *k_CalcSettings, *f_CalcMode, *m_OnClickCalcMode2;
+static void *k_Screen, *m_screen_w, *m_screen_h, *m_screen_sa;
+static void *k_Vector3, *m_GetWorldCorners;
+static float g_shiftUnits, g_halfUnits;
+static void *g_onSprite, *g_offSprite;
+static void *g_container;
+static void *g_wrappedArea;    /* LifeArea we have already arranged */          /* the mode row container */
+static int   g_selMode = -1;       /* mode currently shown as selected */
+static void (*orig_OnClickCalcMode)(void *, int, void *);
+static void *(*il2cpp_field_static_get_value)(void *, void *);
+static void *(*il2cpp_field_static_set_value)(void *, void *);
+
+static void unity_init(void) {
+    void *asm_core = il2cpp_domain_assembly_open(g_domain, "UnityEngine.CoreModule");
+    g_img_core = asm_core ? il2cpp_assembly_get_image(asm_core) : NULL;
+    nlog("UnityEngine.CoreModule image = %p", g_img_core);
+    k_Component  = cls(g_img_core, "UnityEngine", "Component");
+    k_Transform  = cls(g_img_core, "UnityEngine", "Transform");
+    k_Object     = cls(g_img_core, "UnityEngine", "Object");
+    k_GameObject = cls(g_img_core, "UnityEngine", "GameObject");
+    m_get_transform  = meth(k_Component, "get_transform", 0);
+    m_get_gameObject = meth(k_Component, "get_gameObject", 0);
+    m_get_childCount = meth(k_Transform, "get_childCount", 0);
+    m_GetChild       = meth(k_Transform, "GetChild", 1);
+    m_get_name       = meth(k_Object, "get_name", 0);
+    m_set_name       = meth(k_Object, "set_name", 1);
+    m_Instantiate    = meth(k_Object, "Instantiate", 1);
+    m_go_get_transform = meth(k_GameObject, "get_transform", 0);
+    m_SetParent      = meth(k_Transform, "SetParent", 2);
+    m_GetComponent   = meth_sig(k_Component, "GetComponent", 1, "System.Type");
+    m_GetComponents  = meth_sig(k_GameObject, "GetComponents", 1, "System.Type");
+    k_Screen   = cls(g_img_core, "UnityEngine", "Screen");
+    m_screen_w = meth(k_Screen, "get_width", 0);
+    m_screen_h = meth(k_Screen, "get_height", 0);
+    m_screen_sa = meth(k_Screen, "get_safeArea", 0);
+    k_RectTransform  = cls(g_img_core, "UnityEngine", "RectTransform");
+    m_rt_anchorMin   = meth(k_RectTransform, "get_anchorMin", 0);
+    m_rt_anchorMax   = meth(k_RectTransform, "get_anchorMax", 0);
+    m_rt_anchoredPos = meth(k_RectTransform, "get_anchoredPosition", 0);
+    m_rt_sizeDelta   = meth(k_RectTransform, "get_sizeDelta", 0);
+    m_rt_pivot       = meth(k_RectTransform, "get_pivot", 0);
+    m_localScale     = meth(k_Transform, "get_localScale", 0);
+    m_rt_set_anchorMin   = meth(k_RectTransform, "set_anchorMin", 1);
+    m_rt_set_anchorMax   = meth(k_RectTransform, "set_anchorMax", 1);
+    m_rt_set_anchoredPos = meth(k_RectTransform, "set_anchoredPosition", 1);
+    m_rt_set_pivot       = meth(k_RectTransform, "set_pivot", 1);
+    m_rt_set_sizeDelta   = meth(k_RectTransform, "set_sizeDelta", 1);
+    m_get_position       = meth(k_Transform, "get_position", 0);
+    m_set_position       = meth(k_Transform, "set_position", 1);
+    m_set_localScale     = meth(k_Transform, "set_localScale", 1);
+    m_set_localPos       = meth(k_Transform, "set_localPosition", 1);
+    m_rt_rect            = meth(k_RectTransform, "get_rect", 0);
+    m_GetWorldCorners    = meth(k_RectTransform, "GetWorldCorners", 1);
+    k_Vector3            = cls(g_img_core, "UnityEngine", "Vector3");
+    m_GO_ctor            = meth(k_GameObject, ".ctor", 1);
+    m_AddComponent       = meth_sig(k_GameObject, "AddComponent", 1, "System.Type");
+    nlog("wrapper deps: GO.ctor=%p AddComponent=%p get_rect=%p", m_GO_ctor, m_AddComponent, m_rt_rect);
+    nlog("layout setters: anchorMin=%p anchoredPos=%p localScale=%p",
+         m_rt_set_anchorMin, m_rt_set_anchoredPos, m_set_localScale);
+    void *atmp = il2cpp_domain_assembly_open(g_domain, "Unity.TextMeshPro");
+    void *itmp = atmp ? il2cpp_assembly_get_image(atmp) : NULL;
+    k_TMP = itmp ? cls(itmp, "TMPro", "TMP_Text") : NULL;
+    m_set_text = k_TMP ? meth(k_TMP, "set_text", 1) : NULL;
+    m_get_text = k_TMP ? meth(k_TMP, "get_text", 0) : NULL;
+    nlog("TMP image=%p TMP_Text=%p set_text=%p", itmp, k_TMP, m_set_text);
+    k_Behaviour   = cls(g_img_core, "UnityEngine", "Behaviour");
+    m_set_enabled = k_Behaviour ? meth(k_Behaviour, "set_enabled", 1) : NULL;
+    m_Destroy     = meth_sig(k_Object, "Destroy", 1, "UnityEngine.Object");
+    k_BindingText = cls(g_img_cs, "UISystem.LocalizeText", "BindingText");
+    void *aui = il2cpp_domain_assembly_open(g_domain, "UnityEngine.UI");
+    void *iui = aui ? il2cpp_assembly_get_image(aui) : NULL;
+    k_Button = iui ? cls(iui, "UnityEngine.UI", "Button") : NULL;
+    k_Image  = iui ? cls(iui, "UnityEngine.UI", "Image") : NULL;
+    m_SetActive = meth(k_GameObject, "SetActive", 1);
+    m_get_sprite = k_Image ? meth(k_Image, "get_sprite", 0) : NULL;
+    m_set_sprite = k_Image ? meth(k_Image, "set_sprite", 1) : NULL;
+    k_CalcSettings = cls(g_img_cs, "", "CalculatorSettings");
+    f_CalcMode = k_CalcSettings ? il2cpp_class_get_field_from_name(k_CalcSettings, "g_CalcMode") : NULL;
+    void *kcalc = cls(g_img_cs, "", "Calculator");
+    m_OnClickCalcMode2 = kcalc ? meth(kcalc, "OnClickCalcMode", 2) : NULL;
+    nlog("Button=%p Image=%p set_sprite=%p CalculatorSettings=%p g_CalcMode=%p",
+         k_Button, k_Image, m_set_sprite, k_CalcSettings, f_CalcMode);
+    nlog("BindingText=%p set_enabled=%p Destroy=%p", k_BindingText, m_set_enabled, m_Destroy);
+}
+
+static void *tf_child(void *tf, int i);
+static void *tf_parent(void *tf);
+static int   sibling_index(void *tf);
+static void  set_sibling(void *tf, int idx);
+static void  reparent(void *tf, void *parent);
+static void  discard(void *tf);
+static void  rect_size(void *tf, float *w, float *h);
+static void  set_active(void *tf, int on);
+static void  copy_rect_props(void *src, void *dst);
+static int   world_pos(void *tf, float *x, float *y, float *z);
+static void  set_world(void *tf, float x, float y, float z);
+
+/* address of a field by name, walking up the class hierarchy */
+static void *fld(void *obj, const char *name) {
+    if (!obj) return NULL;
+    for (void *k = il2cpp_object_get_class(obj); k; k = il2cpp_class_get_parent(k)) {
+        void *f = il2cpp_class_get_field_from_name(k, name);
+        if (f) return (char *)obj + il2cpp_field_get_offset(f);
+    }
+    return NULL;
+}
+static void *fld_obj(void *obj, const char *name) {
+    void *p = fld(obj, name);
+    return p ? *(void **)p : NULL;
+}
+static void *get_comp(void *component_or_tf, void *klass) {
+    if (!component_or_tf || !klass || !m_GetComponent) return NULL;
+    void *a[1] = { il2cpp_type_get_object(il2cpp_class_get_type(klass)) };
+    return inv(m_GetComponent, component_or_tf, a);
+}
+
+/* dump the persistent listeners registered on a UnityEvent */
+static void dump_unityevent(void *ev, const char *label) {
+    if (!ev) { nlog("  %s: no event", label); return; }
+    void *pcg = fld_obj(ev, "m_PersistentCalls");
+    void *lst = pcg ? fld_obj(pcg, "m_Calls") : NULL;
+    if (!lst) { nlog("  %s: no persistent call list (pcg=%p)", label, pcg); return; }
+    int *sz = (int *)fld(lst, "_size");
+    void *items = fld_obj(lst, "_items");
+    nlog("  %s: %d persistent call(s)", label, sz ? *sz : -1);
+    if (!sz || !items) return;
+    void **el = (void **)((char *)items + 32);
+    for (int i = 0; i < *sz; i++) {
+        void *pc = el[i];
+        if (!pc) continue;
+        void *tgt = fld_obj(pc, "m_Target");
+        void *mn  = fld_obj(pc, "m_MethodName");
+        void *ac  = fld_obj(pc, "m_Arguments");
+        int *mode = (int *)fld(pc, "m_Mode");
+        char mname[96];
+        cs_str(mn, mname, sizeof mname);
+        int *ia = ac ? (int *)fld(ac, "m_IntArgument") : NULL;
+        nlog("    call[%d] target=%s method='%s' mode=%d intArg=%d", i,
+             tgt ? il2cpp_class_get_name(il2cpp_object_get_class(tgt)) : "(null)",
+             mname, mode ? *mode : -1, ia ? *ia : -999);
+    }
+}
+
+
+static void v2(void *boxed, float *x, float *y) {
+    *x = *y = 0;
+    if (!boxed) return;
+    float *f = (float *)il2cpp_object_unbox(boxed);
+    *x = f[0]; *y = f[1];
+}
+
+/* log a RectTransform's layout so the 4-player arrangement can be planned */
+static void dump_rect(void *tf, const char *label) {
+    if (!tf || !k_RectTransform) return;
+    void *rt = get_comp(tf, k_RectTransform);
+    if (!rt) { nlog("  %s: no RectTransform", label); return; }
+    float amnx, amny, amxx, amxy, apx, apy, sdx, sdy, pvx, pvy, sx, sy;
+    v2(inv(m_rt_anchorMin, rt, NULL), &amnx, &amny);
+    v2(inv(m_rt_anchorMax, rt, NULL), &amxx, &amxy);
+    v2(inv(m_rt_anchoredPos, rt, NULL), &apx, &apy);
+    v2(inv(m_rt_sizeDelta, rt, NULL), &sdx, &sdy);
+    v2(inv(m_rt_pivot, rt, NULL), &pvx, &pvy);
+    v2(inv(m_localScale, rt, NULL), &sx, &sy);
+    nlog("  %-22s anchor=(%.2f,%.2f)-(%.2f,%.2f) pos=(%.1f,%.1f) size=(%.1f,%.1f) pivot=(%.2f,%.2f) scale=(%.2f,%.2f)",
+         label, amnx, amny, amxx, amxy, apx, apy, sdx, sdy, pvx, pvy, sx, sy);
+}
+
+typedef struct { float x, y; } V2;
+typedef struct { float x, y, z; } V3;
+
+static void place_panel(void *tf, float ax, float ay, float px, float py, float scale) {
+    if (!tf) return;
+    void *rt = get_comp(tf, k_RectTransform);
+    if (!rt) return;
+    V2 a = { ax, ay }, p = { px, py };
+    V3 sc = { scale, scale, 1.0f };
+    void *aa[1] = { &a };
+    inv(m_rt_set_anchorMin, rt, aa);
+    inv(m_rt_set_anchorMax, rt, aa);
+    void *pa[1] = { &p };
+    inv(m_rt_set_anchoredPos, rt, pa);
+    void *sa[1] = { &sc };
+    inv(m_set_localScale, rt, sa);
+}
+
+static void dump_components(void *go, const char *label) {
+    if (!go || !m_GetComponents) return;
+    void *targs[1] = { il2cpp_type_get_object(il2cpp_class_get_type(k_Component)) };
+    void *arr = inv(m_GetComponents, go, targs);
+    if (!arr) { nlog("no components on %s", label); return; }
+    int n = il2cpp_array_length(arr);
+    void **el = (void **)((char *)arr + 32);   /* il2cpp array data starts at +32 on 64-bit */
+    nlog("--- components of %s (%d) ---", label, n);
+    for (int i = 0; i < n; i++)
+        if (el[i]) nlog("    %s", il2cpp_class_get_name(il2cpp_object_get_class(el[i])));
+}
+
+static int tf_children(void *tf);
+
+#define MODE_FILE "/data/user/0/jp.konami.YugiohOcgSupports/files/neuronmod.mode"
+
+static void save_mode(int m) {
+    FILE *f = fopen(MODE_FILE, "w");
+    if (!f) { nlog("could not write %s", MODE_FILE); return; }
+    fprintf(f, "%d", m);
+    fclose(f);
+}
+static int load_mode(void) {
+    int m = -1;
+    FILE *f = fopen(MODE_FILE, "r");
+    if (f) { if (fscanf(f, "%d", &m) != 1) m = -1; fclose(f); }
+    return m;
+}
+
+static int read_calc_mode(void) {
+    int v = 0;
+    if (f_CalcMode && il2cpp_field_static_get_value) il2cpp_field_static_get_value(f_CalcMode, &v);
+    return v;
+}
+
+static void write_calc_mode(int v) {
+    if (f_CalcMode && il2cpp_field_static_set_value) il2cpp_field_static_set_value(f_CalcMode, &v);
+}
+
+static void *row_radio_image(void *rowTf) {
+    void *radio = tf_child(rowTf, 1);          /* child 1 is "RadioButton" */
+    return radio ? get_comp(radio, k_Image) : NULL;
+}
+
+/* paint the radio buttons so exactly `index` looks selected */
+static void apply_selection(void *container, int index) {
+    if (!container || !m_set_sprite || !g_onSprite || !g_offSprite) return;
+    int n = tf_children(container), changed = 0;
+    for (int i = 0; i < n; i++) {
+        void *img = row_radio_image(tf_child(container, i));
+        if (!img) continue;
+        void *want = (i == index) ? g_onSprite : g_offSprite;
+        if (inv(m_get_sprite, img, NULL) == want) continue;   /* already right */
+        void *a[1] = { want };
+        inv(m_set_sprite, img, a);
+        changed++;
+    }
+    g_selMode = index;
+    if (changed) nlog("selection repainted: row %d of %d (%d changed)", index, n, changed);
+}
+
+/* capture the on/off radio sprites from the stock rows */
+static void capture_sprites(void *self, void *container) {
+    if (g_onSprite && g_offSprite) return;
+    int cur = read_calc_mode();
+    if (cur > 2 || cur < 0) {
+        /* Our own mode is active, so no stock row is lit and there is no "on"
+           sprite to read.  Ask the game to paint row 0 first - with isSave = false
+           so the stored mode is untouched - then learn both sprites from it. */
+        if (m_OnClickCalcMode2 && self) {
+            int zero = 0; uint8_t nosave = 0;
+            void *a[2] = { &zero, &nosave };
+            inv(m_OnClickCalcMode2, self, a);
+            nlog("sprite capture: asked the game to paint row 0 (no save)");
+        }
+        cur = 0;
+    }
+    void *on  = row_radio_image(tf_child(container, cur));
+    void *off = row_radio_image(tf_child(container, cur == 0 ? 1 : 0));
+    if (on)  g_onSprite  = inv(m_get_sprite, on, NULL);
+    if (off) g_offSprite = inv(m_get_sprite, off, NULL);
+    nlog("sprites captured from mode %d: on=%p off=%p", cur, g_onSprite, g_offSprite);
+}
+
+/* point a cloned row's button at a different mode index */
+static void retarget_button(void *rowTf, int mode) {
+    void *btn = get_comp(rowTf, k_Button);
+    if (!btn) { nlog("  clone has no Button"); return; }
+    void *ev = fld_obj(btn, "m_OnClick");
+    void *pcg = ev ? fld_obj(ev, "m_PersistentCalls") : NULL;
+    void *lst = pcg ? fld_obj(pcg, "m_Calls") : NULL;
+    int *sz = lst ? (int *)fld(lst, "_size") : NULL;
+    void *items = lst ? fld_obj(lst, "_items") : NULL;
+    if (!sz || !*sz || !items) { nlog("  clone button has no persistent call"); return; }
+    void **el = (void **)((char *)items + 32);
+    void *ac = fld_obj(el[0], "m_Arguments");
+    int *ia = ac ? (int *)fld(ac, "m_IntArgument") : NULL;
+    if (!ia) { nlog("  no int argument on clone call"); return; }
+    *ia = mode;
+    uint8_t *dirty = (uint8_t *)fld(ev, "m_CallsDirty");
+    if (dirty) *dirty = 1;                  /* force the invokable list to rebuild */
+    nlog("  button retargeted to mode %d (dirty=%d)", mode, dirty ? 1 : 0);
+}
+
+/* clone a row and relabel it */
+static void *clone_row(void *srcGo, void *parentTf, const char *objname, const char *label, int mode) {
+    void *args1[1];
+    args1[0] = srcGo;
+    void *clone = inv(m_Instantiate, NULL, args1);      /* static */
+    if (!clone) { nlog("Instantiate failed for %s", label); return NULL; }
+    void *ctf = inv(m_go_get_transform, clone, NULL);
+    if (ctf) {
+        uint8_t keep_world = 0;                 /* UI clones must not preserve world transform */
+        void *sp[2] = { parentTf, &keep_world };
+        inv(m_SetParent, ctf, sp);
+    }
+    args1[0] = il2cpp_string_new(objname);
+    inv(m_set_name, clone, args1);
+    /* first child is the label Text */
+    void *txt = ctf ? tf_child(ctf, 0) : NULL;
+    /* the clone inherits a BindingText localiser that would re-apply the source label */
+    if (txt && k_BindingText && m_GetComponent) {
+        void *ba[1] = { il2cpp_type_get_object(il2cpp_class_get_type(k_BindingText)) };
+        void *binder = inv(m_GetComponent, txt, ba);
+        nlog("  BindingText on label = %p", binder);
+        if (binder) {
+            if (m_set_enabled) { uint8_t off = 0; void *ea[1] = { &off }; inv(m_set_enabled, binder, ea); }
+            if (m_Destroy)     { void *da[1] = { binder }; inv(m_Destroy, NULL, da); }
+            nlog("  localiser removed");
+        }
+    }
+    if (txt && k_TMP && m_set_text) {
+        void *targs[1];
+        targs[0] = il2cpp_type_get_object(il2cpp_class_get_type(k_TMP));
+        void *comp = inv(m_GetComponent, txt, targs);
+        if (comp) {
+            targs[0] = il2cpp_string_new(label);
+            inv(m_set_text, comp, targs);
+            nlog("  labelled '%s'", label);
+        } else {
+            nlog("  no TMP_Text on label child of %s", objname);
+        }
+    }
+    if (ctf) retarget_button(ctf, mode);
+    nlog("cloned row %s (%s, mode %d) -> %p", objname, label, mode, clone);
+    return clone;
+}
+
+static int tf_children(void *tf) {
+    void *r = inv(m_get_childCount, tf, NULL);
+    return r ? *(int *)il2cpp_object_unbox(r) : 0;
+}
+static void *tf_child(void *tf, int i) {
+    void *args[1] = { &i };
+    return inv(m_GetChild, tf, args);
+}
+static void tf_name(void *o, char *out, int n) {
+    cs_str(inv(m_get_name, o, NULL), out, n);
+}
+
+static void dump_tree(void *tf, int depth, int maxdepth, const char *path) {
+    char nm[128], pad[64], sub[256];
+    int i, c = tf_children(tf);
+    tf_name(tf, nm, sizeof nm);
+    int p = depth * 2; if (p > 60) p = 60;
+    memset(pad, ' ', p); pad[p] = 0;
+    nlog("%s[%s] %s  (%d children)", pad, path, nm, c);
+    if (depth >= maxdepth) return;
+    for (i = 0; i < c; i++) {
+        void *ch = tf_child(tf, i);
+        if (!ch) continue;
+        snprintf(sub, sizeof sub, "%s.%d", path, i);
+        dump_tree(ch, depth + 1, maxdepth, sub);
+    }
+}
+
+static void dump_fields(void *klass, const char *label) {
+    void *iter = NULL, *f;
+    nlog("--- fields of %s ---", label);
+    while ((f = il2cpp_class_get_fields(klass, &iter))) {
+        char *tn = il2cpp_type_get_name(il2cpp_field_get_type(f));
+        nlog("  +%03zu %-28s : %s", il2cpp_field_get_offset(f), il2cpp_field_get_name(f), tn ? tn : "?");
+    }
+}
+
+/* ---------- hook ---------- */
+static void (*orig_OnEnable)(void *, void *);
+
+static void (*orig_StartDuel_OnEnable)(void *, void *);
+static int g_duel_dumped = 0;
+
+/* find Duel/LifeArea under CalculatorMulti */
+static void build_four_player_layout(void *self);
+
+/* Each Calculator Design is its own prefab clone, and they do not all order
+   their children the same way - looking the Duel node up by child index worked
+   on some skins and silently found nothing on others, which left the mod
+   doing nothing at all there.  Search by name instead. */
+static void *find_deep(void *tf, const char *name, int depth) {
+    if (!tf || depth < 0) return NULL;
+    int n = tf_children(tf);
+    for (int i = 0; i < n; i++) {
+        char nm[64]; tf_name(tf_child(tf, i), nm, sizeof nm);
+        if (!strcmp(nm, name)) return tf_child(tf, i);
+    }
+    for (int i = 0; i < n; i++) {
+        void *r = find_deep(tf_child(tf, i), name, depth - 1);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+static void *find_life_area(void *self) {
+    void *multi = *(void **)((char *)self + 176);
+    void *mtf = multi ? inv(m_go_get_transform, multi, NULL) : NULL;
+    if (!mtf) return NULL;
+    void *duel = find_deep(mtf, "Duel", 3);
+    void *la = duel ? find_deep(duel, "LifeArea", 2) : NULL;
+    if (!la) {
+        static void *moaned;
+        if (moaned != mtf) { moaned = mtf; nlog("4P: no LifeArea under this skin (duel=%p)", duel); }
+    }
+    return la;
+}
+
+/* set the "Duelist N" caption inside a cloned panel */
+/* Skins nest the duelist caption differently and name the nodes differently, so
+   neither a fixed path nor a name search finds it reliably.  But the two stock
+   panels are the same prefab showing different text - so diff them.  The node
+   whose text differs between Duelist 01 and Duelist 02 is the caption, and the
+   child-index path to it works on every clone of either prefab. */
+
+/* One-shot: what differs between the two stock panels?  Needed to find the
+   duelist caption on skins where it is not TMP text. */
+static void dump_panel_diff(void *a, void *b, int depth, const char *path) {
+    if (!a || !b || depth < 0) return;
+    char na[64];
+    tf_name(a, na, sizeof na);
+    char here[192];
+    snprintf(here, sizeof here, "%s/%s", path, na);
+    void *ca = k_TMP ? get_comp(a, k_TMP) : NULL;
+    void *cb = k_TMP ? get_comp(b, k_TMP) : NULL;
+    if (ca && cb && m_get_text) {
+        char ta[80], tb[80];
+        cs_str(inv(m_get_text, ca, NULL), ta, sizeof ta);
+        cs_str(inv(m_get_text, cb, NULL), tb, sizeof tb);
+        nlog("  TMP %s : '%s' | '%s'%s", here, ta, tb, strcmp(ta, tb) ? "   <-- DIFFERS" : "");
+    }
+    void *ia = k_Image ? get_comp(a, k_Image) : NULL;
+    void *ib = k_Image ? get_comp(b, k_Image) : NULL;
+    if (ia && ib && m_get_sprite) {
+        void *sa = inv(m_get_sprite, ia, NULL), *sb = inv(m_get_sprite, ib, NULL);
+        char nsa[80] = "(none)", nsb[80] = "(none)";
+        if (sa) cs_str(inv(m_get_name, sa, NULL), nsa, sizeof nsa);
+        if (sb) cs_str(inv(m_get_name, sb, NULL), nsb, sizeof nsb);
+        if (strcmp(nsa, nsb)) nlog("  IMG %s : '%s' | '%s'   <-- DIFFERS", here, nsa, nsb);
+    }
+    int n = tf_children(a), m = tf_children(b);
+    if (m < n) n = m;
+    for (int i = 0; i < n; i++)
+        dump_panel_diff(tf_child(a, i), tf_child(b, i), depth - 1, here);
+}
+
+#define CAPMAX 8
+static int g_capPath[CAPMAX];
+static int g_capLen = -1;
+static int g_capIsSprite;
+static int g_artPath[CAPMAX];
+static int g_artLen = -1;
+
+static int diff_caption(void *a, void *b, int depth, int len) {
+    if (!a || !b || depth < 0 || len > CAPMAX) return 0;
+    void *ca = k_TMP ? get_comp(a, k_TMP) : NULL;
+    void *cb = k_TMP ? get_comp(b, k_TMP) : NULL;
+    if (ca && cb && m_get_text) {
+        char ta[96], tb[96];
+        cs_str(inv(m_get_text, ca, NULL), ta, sizeof ta);
+        cs_str(inv(m_get_text, cb, NULL), tb, sizeof tb);
+        if (ta[0] && strcmp(ta, tb)) { g_capLen = len; g_capIsSprite = 0; return 1; }
+    }
+    /* Several skins draw the caption as artwork instead - and ship art only for
+       players 1 and 2.  Spot it by the sprite differing, preferring a node whose
+       name says it is the caption rather than the panel background. */
+    void *ia = k_Image ? get_comp(a, k_Image) : NULL;
+    void *ib = k_Image ? get_comp(b, k_Image) : NULL;
+    if (ia && ib && m_get_sprite && g_artLen < 0) {
+        char nm[64];
+        tf_name(a, nm, sizeof nm);
+        if (strstr(nm, "Player") || strstr(nm, "Text")) {
+            void *sa = inv(m_get_sprite, ia, NULL), *sb = inv(m_get_sprite, ib, NULL);
+            char x[80] = "", y[80] = "";
+            if (sa) cs_str(inv(m_get_name, sa, NULL), x, sizeof x);
+            if (sb) cs_str(inv(m_get_name, sb, NULL), y, sizeof y);
+            if (x[0] && strcmp(x, y)) {
+                /* remember it whether or not a text caption also turns up - some
+                   skins carry both, and leaving the art on stacks two captions */
+                for (int k = 0; k < len; k++) g_artPath[k] = g_capPath[k];
+                g_artLen = len;
+            }
+        }
+    }
+    int n = tf_children(a), m = tf_children(b);
+    if (m < n) n = m;
+    for (int i = 0; i < n && len < CAPMAX; i++) {
+        g_capPath[len] = i;
+        if (diff_caption(tf_child(a, i), tf_child(b, i), depth - 1, len + 1)) return 1;
+    }
+    if (len == 0 && g_capLen < 0 && g_artLen >= 0) {   /* only artwork - use that */
+        for (int k = 0; k < g_artLen; k++) g_capPath[k] = g_artPath[k];
+        g_capLen = g_artLen;
+        g_capIsSprite = 1;
+        return 1;
+    }
+    return 0;
+}
+
+static void *node_at(void *root, int len) {
+    void *t = root;
+    for (int i = 0; i < len && t; i++) {
+        if (g_capPath[i] >= tf_children(t)) return NULL;
+        t = tf_child(t, g_capPath[i]);
+    }
+    return t;
+}
+
+static void strip_binder(void *tf) {
+    if (!tf || !k_BindingText) return;
+    void *ba[1] = { il2cpp_type_get_object(il2cpp_class_get_type(k_BindingText)) };
+    void *binder = inv(m_GetComponent, tf, ba);
+    if (!binder) return;
+    if (m_set_enabled) { uint8_t off = 0; void *ea[1] = { &off }; inv(m_set_enabled, binder, ea); }
+    if (m_Destroy) { void *da[1] = { binder }; inv(m_Destroy, NULL, da); }
+}
+
+static int set_tmp(void *tf, const char *text) {
+    void *comp = tf ? get_comp(tf, k_TMP) : NULL;
+    if (!comp || !m_set_text) return 0;
+    strip_binder(tf);
+    void *sa[1] = { il2cpp_string_new(text) };
+    inv(m_set_text, comp, sa);
+    return 1;
+}
+
+static void label_panel(void *panelTf, const char *text) {
+    if (!panelTf || g_capLen < 0) return;
+    void *node = node_at(panelTf, g_capLen);
+    if (!node) return;
+    if (!g_capIsSprite) {
+        set_tmp(node, text);
+        if (g_artLen >= 0) {                     /* skin carries both - drop the art */
+            int save[CAPMAX], sl = g_capLen;
+            for (int k = 0; k < sl; k++) save[k] = g_capPath[k];
+            for (int k = 0; k < g_artLen; k++) g_capPath[k] = g_artPath[k];
+            void *art = node_at(panelTf, g_artLen);
+            for (int k = 0; k < sl; k++) g_capPath[k] = save[k];
+            if (art && art != node) set_active(art, 0);
+        }
+        nlog("label: captioned '%s'", text);
+        return;
+    }
+    /* The caption is artwork with no art for players 3-5, so hide it and write
+       into the empty player-name text that sits beside it. */
+    void *parent = tf_parent(node);
+    int n = parent ? tf_children(parent) : 0;
+    /* Take the *empty* text node beside it - that is the player-name field the
+       skin leaves blank.  The other one holds the "LP" heading. */
+    for (int i = 0; i < n; i++) {
+        void *sib = tf_child(parent, i);
+        if (sib == node) continue;
+        void *comp = get_comp(sib, k_TMP);
+        if (!comp || !m_get_text) continue;
+        char cur[64];
+        cs_str(inv(m_get_text, comp, NULL), cur, sizeof cur);
+        if (cur[0]) continue;                    /* already says something */
+        if (set_tmp(sib, text)) {
+            /* the skin leaves this field switched off and sized for a custom
+               name, so wake it up and give it the artwork's slot */
+            set_active(sib, 1);      /* the skin ships it switched off */
+            /* borrow the font from the sibling that already shows skin-styled
+               text (the "LP" heading), so 3-5 do not stand out */
+            for (int j = 0; j < n; j++) {
+                void *don = tf_child(parent, j);
+                if (don == sib || don == node) continue;
+                void *dc = get_comp(don, k_TMP);
+                void *sc = get_comp(sib, k_TMP);
+                if (!dc || !sc) continue;
+                void *fa = fld(dc, "m_fontAsset");
+                void *fb = fld(sc, "m_fontAsset");
+                if (fa && fb) *(void **)fb = *(void **)fa;
+                void *ma = fld(dc, "m_sharedMaterial"), *mb = fld(sc, "m_sharedMaterial");
+                if (ma && mb) *(void **)mb = *(void **)ma;
+                break;
+            }
+            set_tmp(sib, text);
+            set_active(node, 0);
+            nlog("label: captioned '%s' into the blank name field", text);
+            return;
+        }
+    }
+    nlog("label: caption is artwork and no blank text node beside it");
+}
+
+static void *make_wrapper(void *parentTf, const char *name, float dx, float dy, float scale);
+
+static void *find_child(void *tf, const char *name) {
+    if (!tf) return NULL;
+    int n = tf_children(tf);
+    for (int i = 0; i < n; i++) {
+        void *c = tf_child(tf, i);
+        char nm[64]; tf_name(c, nm, sizeof nm);
+        if (!strcmp(nm, name)) return c;
+    }
+    return NULL;
+}
+
+static void set_active(void *tf, int on) {
+    if (!tf || !m_SetActive) return;
+    void *go = inv(m_get_gameObject, tf, NULL);
+    if (!go) return;
+    uint8_t v = on ? 1 : 0;
+    void *a[1] = { &v };
+    inv(m_SetActive, go, a);
+}
+
+static void get_anchored(void *tf, float *x, float *y) {
+    *x = *y = 0;
+    void *rt = get_comp(tf, k_RectTransform);
+    if (rt) v2(inv(m_rt_anchoredPos, rt, NULL), x, y);
+}
+
+/* a reparented element only makes sense once it uses its new neighbours' anchors */
+static void copy_anchors(void *src, void *dst) {
+    void *s = get_comp(src, k_RectTransform), *d = get_comp(dst, k_RectTransform);
+    if (!s || !d) return;
+    float ax, ay, bx, by;
+    v2(inv(m_rt_anchorMin, s, NULL), &ax, &ay);
+    v2(inv(m_rt_anchorMax, s, NULL), &bx, &by);
+    V2 mn = { ax, ay }, mx = { bx, by };
+    void *a[1] = { &mn }, *b[1] = { &mx };
+    inv(m_rt_set_anchorMin, d, a);
+    inv(m_rt_set_anchorMax, d, b);
+}
+
+static void set_anchored(void *tf, float x, float y) {
+    void *rt = get_comp(tf, k_RectTransform);
+    if (!rt) return;
+    V2 p = { x, y };
+    void *a[1] = { &p };
+    inv(m_rt_set_anchoredPos, rt, a);
+}
+
+/* ---- the button row ----------------------------------------------------
+   Unity does have the WPF-style answer: a RectTransform anchored to the bottom
+   edge with a HorizontalLayoutGroup on it hands out the width itself, so no
+   button is ever placed by pixel.  The catch is that the buttons' own
+   RectTransforms are rewritten by game code every frame, so each one sits three
+   levels deep and every level has exactly one owner:
+
+     ModButtonRow    - ours: stretched across the bottom of the duel screen
+       ModCell<name> - the layout group's: one quarter of the row
+         ModHold<..> - ours: cancels whatever offset the game keeps writing
+           <button>  - still the game's, and that is fine
+
+   Nothing we own is touched by the game, so the row survives every frame.     */
+
+#define NBTN 4
+static void *k_HLG;
+static void *g_row, *g_cell[NBTN], *g_hold[NBTN], *g_btn[NBTN], *g_ref[NBTN];
+static void *g_btnHome[NBTN];      /* where each button lived before we took it */
+static int   g_btnHomeIdx[NBTN];
+static int   g_quitHomeIdx = -1;
+static float g_lastW, g_lastH;
+static void *g_slot[5], *g_phold[5], *g_panel[5];
+static int   g_np;
+static int   g_psettle;
+static int   g_labelled;
+static void *g_duelNode;
+static float g_quitY;
+static int   g_stableN;
+static int   g_settle;
+static const char *const g_btnName[NBTN] = { "Log", "Reset", "Undo", "Tools" };
+
+static void *new_rect(void *parentTf, const char *name);
+static void rect_set(void *rt, float amnx, float amny, float amxx, float amxy,
+                     float pvx, float pvy, float w, float h, float px, float py);
+
+
+
+
+static void rect_size(void *tf, float *w, float *h) {
+    *w = *h = 0;
+    void *rt = get_comp(tf, k_RectTransform);
+    if (!rt || !m_rt_rect) return;
+    void *r = inv(m_rt_rect, rt, NULL);
+    if (!r) return;
+    float *f = (float *)il2cpp_object_unbox(r);
+    *w = f[2]; *h = f[3];
+}
+static int world_pos(void *tf, float *x, float *y, float *z) {
+    void *p = tf ? inv(m_get_position, tf, NULL) : NULL;
+    if (!p) return 0;
+    float *f = (float *)il2cpp_object_unbox(p);
+    *x = f[0]; *y = f[1]; *z = f[2];
+    return 1;
+}
+static void set_world(void *tf, float x, float y, float z) {
+    V3 p = { x, y, z };
+    void *a[1] = { &p };
+    inv(m_set_position, tf, a);
+}
+
+/* Transform.position is the *pivot*, and the skins do not all pivot their panels
+   in the middle - which is why some designs came out off-centre.  Take the rect's
+   world corners instead, so the visible box is what gets aligned. */
+static int world_centre(void *tf, float *cx, float *cy) {
+    if (!tf) return 0;
+    void *rt = get_comp(tf, k_RectTransform);
+    if (rt && m_GetWorldCorners && il2cpp_array_new && k_Vector3) {
+        void *arr = il2cpp_array_new(k_Vector3, 4);
+        if (arr) {
+            void *a[1] = { arr };
+            inv(m_GetWorldCorners, rt, a);
+            float *f = (float *)((char *)arr + 32);
+            *cx = (f[0] + f[6]) * 0.5f;
+            *cy = (f[1] + f[7]) * 0.5f;
+            return 1;
+        }
+    }
+    float z;
+    return world_pos(tf, cx, cy, &z);
+}
+
+static void *tf_parent(void *tf) {
+    return tf ? inv(meth(k_Transform, "get_parent", 0), tf, NULL) : NULL;
+}
+static int sibling_index(void *tf) {
+    void *p = tf_parent(tf);
+    if (!p) return -1;
+    int n = tf_children(p);
+    for (int i = 0; i < n; i++) if (tf_child(p, i) == tf) return i;
+    return -1;
+}
+static void set_sibling(void *tf, int idx) {
+    void *m = meth_sig(k_Transform, "SetSiblingIndex", 1, "System.Int32");
+    if (!tf || !m || idx < 0) return;
+    void *a[1] = { &idx };
+    inv(m, tf, a);
+}
+static void reparent(void *tf, void *parent) {
+    if (!tf) return;
+    uint8_t keep = 0;
+    void *a[2] = { parent, &keep };
+    inv(m_SetParent, tf, a);
+}
+/* Destroy is deferred to the end of the frame, which is too late when the game
+   is about to walk this very hierarchy - so lift it out of the tree first. */
+static void discard(void *tf) {
+    if (!tf) return;
+    reparent(tf, NULL);
+    void *go = inv(m_get_gameObject, tf, NULL);
+    if (go && m_Destroy) { void *a[1] = { go }; inv(m_Destroy, NULL, a); }
+}
+
+/* GetComponents(Type) was stripped from this build, so enumerate the class list
+   and ask for each Component subclass one at a time. */
+static void probe_components(void *tf, const char *label) {
+    if (!tf) return;
+    void *imgs[2] = { g_img_cs, g_img_core };
+    char line[900]; line[0] = 0;
+    for (int im = 0; im < 2; im++) {
+        if (!imgs[im] || !il2cpp_image_get_class_count) continue;
+        size_t n = il2cpp_image_get_class_count(imgs[im]);
+        for (size_t i = 0; i < n; i++) {
+            void *k = il2cpp_image_get_class(imgs[im], i);
+            if (!k) continue;
+            const char *kn = il2cpp_class_get_name(k);
+            if (!kn || strchr(kn, '`') || strchr(kn, '<')) continue;
+            int isComp = 0;
+            for (void *pk = k; pk; pk = il2cpp_class_get_parent(pk))
+                if (pk == k_Component) { isComp = 1; break; }
+            if (!isComp) continue;
+            if (!get_comp(tf, k)) continue;
+            if (strlen(line) + strlen(kn) + 2 >= sizeof line) break;
+            strcat(line, kn);
+            strcat(line, " ");
+        }
+    }
+    nlog("components of %s: %s", label, line[0] ? line : "(none)");
+}
+
+
+/* name / rect / sprite of everything inside a button, so Reset and Undo can be
+   made to match Log and Tools */
+static void dump_button(void *tf, const char *label) {
+    if (!tf) return;
+    nlog("--- button %s ---", label);
+    dump_rect(tf, label);
+    {
+        void *img = k_Image ? get_comp(tf, k_Image) : NULL;
+        void *sp  = (img && m_get_sprite) ? inv(m_get_sprite, img, NULL) : NULL;
+        if (sp) { void *snm = inv(m_get_name, sp, NULL); char sn[96];
+                  cs_str(snm, sn, sizeof sn); nlog("      root sprite: %s", sn); }
+        else nlog("      root sprite: %s", img ? "(none)" : "(no Image)");
+    }
+    int n = tf_children(tf);
+    for (int i = 0; i < n; i++) {
+        void *c = tf_child(tf, i);
+        char nm[64]; tf_name(c, nm, sizeof nm);
+        char line[160];
+        snprintf(line, sizeof line, "%s.%s", label, nm);
+        dump_rect(c, line);
+        void *img = k_Image ? get_comp(c, k_Image) : NULL;
+        if (img && m_get_sprite) {
+            void *sp = inv(m_get_sprite, img, NULL);
+            if (sp) {
+                void *snm = inv(m_get_name, sp, NULL);
+                char sn[96]; cs_str(snm, sn, sizeof sn);
+                nlog("      sprite: %s", sn);
+            }
+        }
+    }
+}
+
+
+/* Reset and Undo are the same prefab with Undo mirrored, which is why their
+   triangles point opposite ways and Reset's caption sits on top.  Each skin
+   names and lays out its parts differently, so rather than guess, copy Undo's
+   geometry onto Reset part by part - same scale, same anchors, same caption
+   strip - and leave the sprites alone so Reset keeps its own icon and wording. */
+static void copy_rect_props(void *src, void *dst) {
+    void *a2 = get_comp(src, k_RectTransform), *b2 = get_comp(dst, k_RectTransform);
+    if (!a2 || !b2) return;
+    struct { void *get, *set; } pair[5] = {
+        { m_rt_anchorMin,   m_rt_set_anchorMin   },
+        { m_rt_anchorMax,   m_rt_set_anchorMax   },
+        { m_rt_pivot,       m_rt_set_pivot       },
+        { m_rt_sizeDelta,   m_rt_set_sizeDelta   },
+        { m_rt_anchoredPos, m_rt_set_anchoredPos },
+    };
+    for (int i = 0; i < 5; i++) {
+        if (!pair[i].get || !pair[i].set) continue;
+        float x, y;
+        v2(inv(pair[i].get, a2, NULL), &x, &y);
+        V2 v = { x, y };
+        void *arg[1] = { &v };
+        inv(pair[i].set, b2, arg);
+    }
+    float sx, sy;
+    v2(inv(m_localScale, a2, NULL), &sx, &sy);
+    V3 sc = { sx, sy, 1.0f };
+    void *arg[1] = { &sc };
+    inv(m_set_localScale, b2, arg);
+}
+
+static void match_reset_to_undo(void *reset, void *undo) {
+    if (!reset || !undo) return;
+    /* Only the mirroring carries over from the root - copying its position too
+       would park Reset on top of Undo. */
+    void *ur = get_comp(undo, k_RectTransform), *rr = get_comp(reset, k_RectTransform);
+    if (ur && rr) {
+        float ux, uy, rx, ry;
+        v2(inv(m_localScale, ur, NULL), &ux, &uy);
+        v2(inv(m_localScale, rr, NULL), &rx, &ry);
+        if (rx < 0.0f) rx = -rx;
+        V3 sc = { rx, (uy < 0.0f) ? -rx : rx, 1.0f };
+        void *a[1] = { &sc };
+        inv(m_set_localScale, rr, a);
+    }
+    int n = tf_children(undo);
+    for (int i = 0; i < n; i++) {
+        void *uc = tf_child(undo, i);
+        char nm[64]; tf_name(uc, nm, sizeof nm);
+        void *rc = find_child(reset, nm);
+        if (rc) copy_rect_props(uc, rc);
+    }
+}
+
+/* Skins draw the four buttons at wildly different sizes, and the rects do not
+   reflect that - Duel Monsters gives Reset a small hexagon inside the same
+   160x160 rect that Log fills with a big triangle.  Measure what is actually on
+   screen (the largest graphic inside each button) and scale the buttons until
+   those match.  Runs every frame, so it converges and then holds. */
+static float drawn_height(void *b) {
+    int n = tf_children(b);
+    void *best = NULL;
+    float bestArea = 0.0f;
+    for (int i = 0; i < n; i++) {
+        void *c = tf_child(b, i);
+        if (!k_Image || !get_comp(c, k_Image)) continue;
+        float cw, ch;
+        rect_size(c, &cw, &ch);
+        if (cw * ch > bestArea) { bestArea = cw * ch; best = c; }
+    }
+    if (!best) best = b;
+    void *rt = get_comp(best, k_RectTransform);
+    if (!rt || !m_GetWorldCorners || !il2cpp_array_new || !k_Vector3) return 0.0f;
+    void *arr = il2cpp_array_new(k_Vector3, 4);
+    if (!arr) return 0.0f;
+    void *a[1] = { arr };
+    inv(m_GetWorldCorners, rt, a);
+    float *f = (float *)((char *)arr + 32);
+    float hgt = f[4] - f[1];                  /* corner1.y (top-left) - corner0.y */
+    return hgt < 0 ? -hgt : hgt;
+}
+
+static void equalise_buttons(void) {
+    float dh[NBTN], target = 0.0f;
+    for (int i = 0; i < NBTN; i++) {
+        if (!g_btn[i]) return;
+        dh[i] = drawn_height(g_btn[i]);
+        if (dh[i] < 0.0001f) return;
+        if (dh[i] > target) target = dh[i];
+    }
+    for (int i = 0; i < NBTN; i++) {
+        float k = target / dh[i];
+        if (k > 0.995f && k < 1.005f) continue;      /* already matched */
+        if (k > 1.5f) k = 1.5f;                      /* ease into it */
+        void *rt = get_comp(g_btn[i], k_RectTransform);
+        if (!rt) continue;
+        float sx, sy;
+        v2(inv(m_localScale, rt, NULL), &sx, &sy);
+        float mag = (sx < 0.0f ? -sx : sx) * k;
+        V3 sc = { mag, (sy < 0.0f) ? -mag : mag, 1.0f };
+        void *a[1] = { &sc };
+        inv(m_set_localScale, rt, a);
+    }
+}
+
+
+
+
+
+/* Reset and Undo are the same prefab, one of them mirrored, which is why their
+   triangles point opposite ways and their captions sit at different heights.
+   Rather than live with that, give all four buttons identical geometry: upright
+   transform at the same scale, only the triangle frame flipped so both point the
+   same way, and the caption pinned to the same strip at the bottom of the rect. */
+static void normalise_button(void *b, int flipFrame) {
+    if (!b) return;
+    void *rt = get_comp(b, k_RectTransform);
+    if (!rt) return;
+    V3 one = { 1.0f, 1.0f, 1.0f };
+    void *a1[1] = { &one };
+    inv(m_set_localScale, rt, a1);
+
+    const char *kid[5] = { "ImageBtn", "Image_eff", "ImageIcon", "text_img", "Text" };
+    for (int i = 0; i < 5; i++) {
+        void *c = find_child(b, kid[i]);
+        void *crt = c ? get_comp(c, k_RectTransform) : NULL;
+        if (!crt) continue;
+        float sx, sy;
+        v2(inv(m_localScale, crt, NULL), &sx, &sy);
+        if (sx < 0.0f) sx = -sx;
+        if (sy < 0.0f) sy = -sy;
+        float wantY = (flipFrame && i < 2) ? -sy : sy;    /* the frame, nothing else */
+        V3 cs = { sx, wantY, 1.0f };
+        void *a2[1] = { &cs };
+        inv(m_set_localScale, crt, a2);
+    }
+
+    /* caption strip: same anchor, same offset, on all four */
+    void *ti = find_child(b, "text_img");
+    void *tir = ti ? get_comp(ti, k_RectTransform) : NULL;
+    if (tir) {
+        V2 an = { 0.5f, 0.0f }, po = { 0.0f, 10.0f };
+        void *x[1] = { &an }, *y[1] = { &po };
+        inv(m_rt_set_anchorMin, tir, x);
+        inv(m_rt_set_anchorMax, tir, x);
+        inv(m_rt_set_anchoredPos, tir, y);
+    }
+    void *tx = find_child(b, "Text");
+    void *txr = tx ? get_comp(tx, k_RectTransform) : NULL;
+    if (txr) {
+        V2 an = { 0.5f, 0.5f }, po = { 0.0f, -68.0f };
+        void *x[1] = { &an }, *y[1] = { &po };
+        inv(m_rt_set_anchorMin, txr, x);
+        inv(m_rt_set_anchorMax, txr, x);
+        inv(m_rt_set_anchoredPos, txr, y);
+    }
+}
+
+
+
+/* put a HorizontalLayoutGroup on the row and tell it to share the width out
+   evenly.  Its settings live in serialized fields, so write those rather than
+   trust setters the build may have stripped. */
+static int add_layout_group(void *rowRt) {
+    if (!k_HLG) {
+        void *asm_ = il2cpp_domain_assembly_open(g_domain, "UnityEngine.UI");
+        void *img  = asm_ ? il2cpp_assembly_get_image(asm_) : NULL;
+        k_HLG = img ? il2cpp_class_from_name(img, "UnityEngine.UI", "HorizontalLayoutGroup") : NULL;
+        nlog("buttons: HorizontalLayoutGroup class = %p", k_HLG);
+    }
+    if (!k_HLG) return 0;
+    void *go = inv(m_get_gameObject, rowRt, NULL);
+    if (!go) return 0;
+    void *ta[1] = { il2cpp_type_get_object(il2cpp_class_get_type(k_HLG)) };
+    void *g = get_comp(rowRt, k_HLG);
+    if (!g) g = inv(m_AddComponent, go, ta);
+    if (!g) { nlog("buttons: AddComponent(HorizontalLayoutGroup) failed"); return 0; }
+    int   *al = (int *)fld(g, "m_ChildAlignment");
+    float *sp = (float *)fld(g, "m_Spacing");
+    uint8_t *b;
+    if (al) *al = 4;            /* TextAnchor.MiddleCenter */
+    if (sp) *sp = 0.0f;
+    if ((b = (uint8_t *)fld(g, "m_ChildForceExpandWidth")))  *b = 1;   /* even quarters */
+    if ((b = (uint8_t *)fld(g, "m_ChildForceExpandHeight"))) *b = 0;
+    if ((b = (uint8_t *)fld(g, "m_ChildControlWidth")))      *b = 0;   /* don't resize them */
+    if ((b = (uint8_t *)fld(g, "m_ChildControlHeight")))     *b = 0;
+    if ((b = (uint8_t *)fld(g, "m_ChildScaleWidth")))        *b = 0;
+    if ((b = (uint8_t *)fld(g, "m_ChildScaleHeight")))       *b = 0;
+    nlog("buttons: layout group configured (align=%p spacing=%p)", (void *)al, (void *)sp);
+    return 1;
+}
+
+
+/* Reset carries its caption above the icon and Undo below it, so the two rect
+   centres are at different heights even when the rects line up.  Align on the
+   button's own graphic instead and the icons sit on one line. */
+static void *icon_of(void *btnTf) {
+    void *bc = k_Button ? get_comp(btnTf, k_Button) : NULL;
+    void *g  = bc ? fld_obj(bc, "m_TargetGraphic") : NULL;
+    void *tf = g ? inv(m_get_transform, g, NULL) : NULL;
+    return tf ? tf : btnTf;
+}
+
+/* re-attach to a row we built on an earlier visit to the duel screen */
+static int rebind_row(void *row) {
+    g_row = row;
+    for (int i = 0; i < NBTN; i++) {
+        char cn[32], hn[32];
+        snprintf(cn, sizeof cn, "ModCell%s", g_btnName[i]);
+        snprintf(hn, sizeof hn, "ModHold%s", g_btnName[i]);
+        g_cell[i] = find_child(row, cn);
+        g_hold[i] = g_cell[i] ? find_child(g_cell[i], hn) : NULL;
+        g_btn[i]  = (g_hold[i] && tf_children(g_hold[i]) > 0) ? tf_child(g_hold[i], 0) : NULL;
+        if (!g_btn[i]) { nlog("buttons: rebind lost %s", g_btnName[i]); return 0; }
+        g_ref[i] = g_btn[i];
+    }
+    return 1;
+}
+
+/* Free up the bottom edge: drop the two buttons we never use, then hand the
+   remaining four to one bottom-anchored row that lays them out itself. */
+static void arrange_buttons(void *duel) {
+    void *existing = find_child(duel, "ModButtonRow");
+    if (existing && rebind_row(existing)) {
+        g_settle = 240;
+        nlog("buttons: row already built, re-settling");
+        return;
+    }
+
+    {   /* one-shot: what else lives on this screen (close button, help button) */
+        static int once;
+        if (!once) {
+            once = 1;
+            void *par = inv(meth(k_Transform, "get_parent", 0), duel, NULL);
+            if (par) { dump_tree(par, 0, 3, "duelParent"); }
+            int n = tf_children(duel);
+            for (int i = 0; i < n; i++) {
+                void *c = tf_child(duel, i);
+                char s[64]; tf_name(c, s, sizeof s);
+                dump_rect(c, s);
+            }
+            /* GetComponents(Type) is stripped, so ask for every Component
+               subclass by name instead - what is bobbing Reset and Undo? */
+            void *r0 = find_child(duel, "Reset"), *u0 = find_child(duel, "Undo");
+            probe_components(r0, "Reset");
+            probe_components(u0, "Undo");
+            dump_button(r0, "Reset");
+            dump_button(u0, "Undo");
+            void *mn0 = find_child(duel, "Menu");
+            dump_button(find_child(mn0, "ShowHistory"), "Log");
+            dump_button(find_child(mn0, "PlayUtility"), "Tools");
+        }
+    }
+    void *reset = find_child(duel, "Reset");
+    void *undo  = find_child(duel, "Undo");
+    void *menu  = find_child(duel, "Menu");
+    if (!reset || !undo || !menu) { nlog("buttons: reset=%p undo=%p menu=%p", reset, undo, menu); return; }
+
+    void *log   = find_child(menu, "ShowHistory");
+    void *tools = find_child(menu, "PlayUtility");
+    set_active(find_child(menu, "SetBGM"), 0);
+    set_active(find_child(menu, "SearchCardByCamera"), 0);
+
+    void *btn[NBTN] = { log, reset, undo, tools };
+    for (int i = 0; i < NBTN; i++)
+        if (!btn[i]) { nlog("buttons: missing %s", g_btnName[i]); return; }
+
+    /* remember where each one belongs so the screen can be handed back intact */
+    for (int i = 0; i < NBTN; i++) {
+        g_btnHome[i]    = tf_parent(btn[i]);
+        g_btnHomeIdx[i] = sibling_index(btn[i]);
+    }
+
+    set_active(find_child(duel, "Info"), 0);      /* tutorial / help, unused here */
+
+    /* The X is an earlier sibling than LifeArea, so Duelist 1's panel - whose
+       touch area covers its whole rect, transparent corners included - was
+       swallowing taps meant for it.  Move it to just after LifeArea: above the
+       panels, still below every dialog that comes later. */
+    {
+        void *quit = find_child(duel, "Quit");
+        void *la   = find_child(duel, "LifeArea");
+        int qi = sibling_index(quit), li = sibling_index(la);
+        if (qi >= 0 && li >= 0) {
+            g_quitHomeIdx = qi;
+            set_sibling(quit, qi < li ? li : li + 1);
+            nlog("buttons: Quit moved from %d to just after LifeArea (%d)", qi, li);
+        }
+    }
+
+    float dw = 0, dh = 0;
+    rect_size(duel, &dw, &dh);
+    if (dw < 2 || dh < 2) { nlog("buttons: could not read the duel rect"); return; }
+
+    float bw[NBTN], bh[NBTN], rowH = 0;
+    for (int i = 0; i < NBTN; i++) {
+        rect_size(btn[i], &bw[i], &bh[i]);
+        if (bw[i] < 2) bw[i] = dw * 0.08f;
+        if (bh[i] < 2) bh[i] = dh * 0.14f;
+        if (bh[i] > rowH) rowH = bh[i];          /* the tallest one sets the depth */
+    }
+
+    g_row = new_rect(duel, "ModButtonRow");
+    if (!g_row) return;
+    /* Stretched along the bottom edge and inset from both sides.  The layout
+       group shares the remaining width out evenly, so widening the margin is
+       the single knob that tightens the gaps between the four buttons. */
+    const float half = (g_halfUnits > 1.0f) ? g_halfUnits : dw * 0.5f;
+    const float rowW = half * 0.78f;          /* clustered centrally, clear of the outer panels */
+    rect_set(g_row, 0.0f, 0.0f, 1.0f, 0.0f, 0.5f, 0.0f, rowW - dw, rowH,
+             g_shiftUnits, rowH * 0.12f);
+    int laid = add_layout_group(g_row);
+    if (!laid) nlog("buttons: no layout group available, anchoring cells by fraction");
+
+    for (int i = 0; i < NBTN; i++) {
+        char cn[32], hn[32];
+        snprintf(cn, sizeof cn, "ModCell%s", g_btnName[i]);
+        snprintf(hn, sizeof hn, "ModHold%s", g_btnName[i]);
+        g_cell[i] = new_rect(g_row, cn);
+        if (!g_cell[i]) return;
+        if (laid) {
+            rect_set(g_cell[i], 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, bw[i], bh[i], 0.0f, 0.0f);
+        } else {
+            float f = (i + 0.5f) / (float)NBTN;   /* same even split, done by anchor */
+            rect_set(g_cell[i], f, 0.5f, f, 0.5f, 0.5f, 0.5f, bw[i], bh[i], 0.0f, 0.0f);
+        }
+        g_hold[i] = new_rect(g_cell[i], hn);
+        if (!g_hold[i]) return;
+        rect_set(g_hold[i], 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f);
+        uint8_t keep = 0;
+        void *sp[2] = { g_hold[i], &keep };
+        inv(m_SetParent, btn[i], sp);
+        g_btn[i] = btn[i];
+        g_ref[i] = btn[i];
+    }
+    /* Our row was appended last, so it sat on top of the Log and Tools popups.
+       Slot it in right after Menu - above the panels, below every dialog. */
+    {
+        int mi = sibling_index(menu);
+        if (mi >= 0) set_sibling(g_row, mi + 1);
+    }
+    g_duelNode = duel;
+    /* lift the X clear of the top row - a fraction of the screen, not pixels */
+    g_quitY = -dh * 0.062f;
+    g_settle = 240;
+    nlog("buttons: one %.0fpx row across a %.0fx%.0f duel screen, layout group=%d", rowH, dw, dh, laid);
+}
+
+/* The game rewrites each button's own transform every frame, so rather than
+   fight it we shift the parent we own until the button lands on its cell.
+   Two or three frames and the error is gone; after that this is a no-op. */
+static void settle_buttons(void) {
+    if (!g_row) return;
+    /* game code re-drives these every frame, so re-assert them */
+    match_reset_to_undo(g_btn[1], g_btn[2]);
+    equalise_buttons();
+
+    /* The Timer and the close button belong to the game, but they inherit the
+       same off-centre canvas, so give them the same correction.  The X also
+       moves up out of the top row's way. */
+    if (g_duelNode) {
+        void *tm = find_child(g_duelNode, "Timer");
+        void *rt = tm ? get_comp(tm, k_RectTransform) : NULL;
+        if (rt) {
+            float x, y;
+            v2(inv(m_rt_anchoredPos, rt, NULL), &x, &y);
+            if (x < g_shiftUnits - 0.5f || x > g_shiftUnits + 0.5f) {
+                V2 v = { g_shiftUnits, y };
+                void *a[1] = { &v };
+                inv(m_rt_set_anchoredPos, rt, a);
+            }
+        }
+        void *q = find_child(g_duelNode, "Quit");
+        void *qr = q ? get_comp(q, k_RectTransform) : NULL;
+        if (qr && g_quitY < -0.5f) {
+            float x, y;
+            v2(inv(m_rt_anchoredPos, qr, NULL), &x, &y);
+            if (y < g_quitY - 0.5f || y > g_quitY + 0.5f) {
+                V2 v = { x, g_quitY };
+                void *a[1] = { &v };
+                inv(m_rt_set_anchoredPos, qr, a);
+            }
+        }
+    }
+    if (g_settle > 0) g_settle--;
+    for (int i = 0; i < NBTN; i++) {
+        float cx, cy, bx, by, hx, hy, hz;
+        if (!world_centre(g_cell[i], &cx, &cy)) continue;
+        if (!world_centre(g_ref[i],  &bx, &by)) continue;
+        if (!world_pos(g_hold[i], &hx, &hy, &hz)) continue;
+        float ex = cx - bx, ey = cy - by;
+        if (ex * ex + ey * ey < 0.0001f) continue;
+        set_world(g_hold[i], hx + ex, hy + ey, hz);
+    }
+}
+
+/* A bare RectTransform we own, created empty under parentTf.  Reused if a
+   previous visit to this screen already made one with the same name. */
+static void *new_rect(void *parentTf, const char *name) {
+    void *ex = find_child(parentTf, name);
+    if (ex) return get_comp(ex, k_RectTransform);
+    if (!m_GO_ctor || !m_AddComponent || !il2cpp_object_new) {
+        nlog("rect %s: missing dep (ctor=%p add=%p new=%p)", name,
+             m_GO_ctor, m_AddComponent, (void *)il2cpp_object_new);
+        return NULL;
+    }
+    void *go = il2cpp_object_new(k_GameObject);
+    if (!go) { nlog("rect %s: object_new failed", name); return NULL; }
+    void *na[1] = { il2cpp_string_new(name) };
+    inv(m_GO_ctor, go, na);
+    inv(m_set_name, go, na);
+    void *ta[1] = { il2cpp_type_get_object(il2cpp_class_get_type(k_RectTransform)) };
+    void *rt = inv(m_AddComponent, go, ta);
+    if (!rt) { nlog("rect %s: AddComponent failed", name); return NULL; }
+    uint8_t keep = 0;
+    void *sp[2] = { parentTf, &keep };
+    inv(m_SetParent, rt, sp);
+    return rt;
+}
+
+static void rect_set(void *rt, float amnx, float amny, float amxx, float amxy,
+                     float pvx, float pvy, float w, float h, float px, float py) {
+    if (!rt) return;
+    V2 amn = { amnx, amny }, amx = { amxx, amxy }, pv = { pvx, pvy },
+       sd  = { w, h },       ap  = { px, py };
+    void *a[1];
+    a[0] = &amn; inv(m_rt_set_anchorMin, rt, a);
+    a[0] = &amx; inv(m_rt_set_anchorMax, rt, a);
+    a[0] = &pv;  inv(m_rt_set_pivot, rt, a);
+    a[0] = &sd;  inv(m_rt_set_sizeDelta, rt, a);
+    a[0] = &ap;  inv(m_rt_set_anchoredPos, rt, a);
+    V3 one = { 1, 1, 1 };
+    a[0] = &one; inv(m_set_localScale, rt, a);
+}
+
+/* A full-stretch wrapper for one LP panel.  The game animates the panel's own
+   transform every frame, so the arrangement has to live on a parent. */
+static void *make_wrapper(void *parentTf, const char *name, float dx, float dy, float scale) {
+    void *rt = new_rect(parentTf, name);
+    if (!rt) return NULL;
+    rect_set(rt, 0.0f, 0.0f, 1.0f, 1.0f, 0.5f, 0.5f, 0.0f, 0.0f, dx, dy);
+    V3 sc = { scale, scale, 1.0f };
+    void *as[1] = { &sc };
+    inv(m_set_localScale, rt, as);
+    return rt;
+}
+
+
+/* Why everything drifts to one side.
+
+   The screen is not symmetrical: a display cutout takes a strip off one edge.
+   Unity reports it as Screen.safeArea, and the game centres its canvas on that
+   safe region rather than on the physical screen - so with a 126px cutout on the
+   left, dead centre of the canvas lands 63px right of dead centre of the glass.
+   Every element inherits that, the game's own Timer included, which is why the
+   middle window always looked shifted right.
+
+   The rule: express the cutout as a fraction of the width, and shift our layout
+   back by half the difference between the two sides.  Ratios only, so it holds
+   whatever the device. */
+static void measure_screen(void *la, float w) {
+    (void)la;
+    g_shiftUnits = 0.0f;
+    g_halfUnits  = w * 0.5f;
+    if (!m_screen_w || !m_screen_sa) return;
+    void *swr = inv(m_screen_w, NULL, NULL);
+    void *sa  = inv(m_screen_sa, NULL, NULL);
+    if (!swr || !sa) return;
+    float screenW = (float)(*(int *)il2cpp_object_unbox(swr));
+    float *r = (float *)il2cpp_object_unbox(sa);
+    if (screenW < 1.0f || r[2] < 1.0f || r[2] > screenW) return;
+    float leftFrac  = r[0] / screenW;
+    float rightFrac = (screenW - (r[0] + r[2])) / screenW;
+    g_shiftUnits = (rightFrac - leftFrac) * 0.5f * w;
+    nlog("screen: cutout %.2f%% left / %.2f%% right -> recentre by %.1f units",
+         leftFrac * 100.0f, rightFrac * 100.0f, g_shiftUnits);
+}
+
+/* 2x2 grid: each stock panel is moved into a wrapper we position and scale */
+static void build_four_player_layout(void *self) {
+    void *la = find_life_area(self);
+    if (!la) return;
+    if (la == g_wrappedArea) return;                  /* already arranged */
+    char nm[64];
+
+    /* The LifeArea rect animates in, so an early read gives a rect that is a
+       few per cent short and the panels land in the wrong places.  Wait for it
+       to hold still. */
+    float w = 0, h = 0;
+    {
+        void *lart0 = get_comp(la, k_RectTransform);
+        if (lart0 && m_rt_rect) {
+            void *r = inv(m_rt_rect, lart0, NULL);
+            if (r) { float *f = (float *)il2cpp_object_unbox(r); w = f[2]; h = f[3]; }
+        }
+        if (w < 1 || h < 1) { g_stableN = 0; return; }
+        float dw2 = w - g_lastW, dh2 = h - g_lastH;
+        if (dw2 < 0) dw2 = -dw2;
+        if (dh2 < 0) dh2 = -dh2;
+        if (dw2 > 0.5f || dh2 > 0.5f) { g_lastW = w; g_lastH = h; g_stableN = 0; return; }
+        if (++g_stableN < 5) return;
+    }
+
+    const int np = (g_selMode >= 4) ? 5 : 4;      /* 5 screens puts one in the middle */
+    int n = tf_children(la);
+    if (n < np) {
+        for (int i = n; i < np; i++) {
+            void *src = tf_child(la, i % 2);      /* alternate so each column keeps its mirroring */
+            void *go = inv(m_get_gameObject, src, NULL);
+            void *a1[1] = { go };
+            void *clone = inv(m_Instantiate, NULL, a1);
+            if (!clone) continue;
+            void *ctf = inv(m_go_get_transform, clone, NULL);
+            uint8_t keep = 0;
+            void *sp[2] = { la, &keep };
+            if (ctf) inv(m_SetParent, ctf, sp);
+            char cn[32];
+            snprintf(cn, sizeof cn, "Life0%d", i + 1);
+            void *na[1] = { il2cpp_string_new(cn) };
+            inv(m_set_name, clone, na);
+        }
+        n = tf_children(la);
+    }
+    if (n < np) { nlog("4P: only %d panels, wanted %d", n, np); return; }
+
+    nlog("4P: LifeArea is %.0fx%.0f", w, h);
+
+    /* on a second visit the direct children are our own slots, not the panels */
+    void *panels[5];
+    int wrapped = find_child(la, "ModSlot0") != NULL;
+    for (int i = 0; i < np; i++) {
+        if (wrapped) {
+            char s[16];
+            snprintf(s, sizeof s, "ModSlot%d", i);
+            void *w = find_child(la, s);
+            void *hd = w ? find_child(w, "ModPanelHold") : NULL;
+            panels[i] = (hd && tf_children(hd) > 0) ? tf_child(hd, 0)
+                      : ((w && tf_children(w) > 0) ? tf_child(w, 0) : NULL);
+        } else {
+            panels[i] = tf_child(la, i);
+        }
+    }
+
+    /* Half scale halves the usable area; a quarter-width shift puts the panels hard
+       against the screen edges, so pull them in a little.  The bottom row is raised
+       further to clear the Log / Tools / Music / Camera buttons along the bottom. */
+    const float topMargin = h * 0.012f;      /* clear of the status bar */
+    /* Each Calculator Design skin ships a differently proportioned panel - the
+       Simple one is far shorter and wider than Standard - so fit the panel into
+       its share of the screen on both axes and take whichever is tighter.  The
+       two fractions are the Standard design's own proportions, so it comes out
+       at exactly the scale it had before. */
+    float pw = 0, ph = 0;
+    rect_size(panels[0], &pw, &ph);
+    /* Five panels have to share the width with one in the middle, so they get a
+       narrower budget than four do. */
+    measure_screen(la, w);
+    const float vis = g_halfUnits * 2.0f;             /* canvas units actually on screen */
+    const float maxW = vis * (np == 5 ? 0.29f : 0.31f);
+    const float maxH = h * 0.39f;
+    float byW = (pw > 1.0f) ? maxW / pw : 1.0f;
+    float byH = (ph > 1.0f) ? maxH / ph : 1.0f;
+    const float scale = (byW < byH) ? byW : byH;
+    const float sw = pw * scale;
+    nlog("4P: panel %.0fx%.0f -> scale %.3f (width %.3f, height %.3f)", pw, ph, scale, byW, byH);
+
+    /* Sit the outer columns hard against the edges without hanging off them -
+       the Simple skin fills its rect completely, so any overhang is a visible
+       crop rather than the Standard skin's transparent bleed. */
+    const float sh = g_shiftUnits;
+    const float shAbs = (sh < 0.0f) ? -sh : sh;
+    float cx = g_halfUnits - sw * 0.5f - vis * 0.012f;
+    /* recentring eats into one side, so pull both columns in by that much and
+       keep the pair symmetric about the middle of the glass */
+    const float lim = w * 0.5f - shAbs - sw * 0.5f - w * 0.012f;
+    if (cx > lim) cx = lim;
+    const float tx[5] = { sh - cx, sh + cx, sh - cx, sh + cx, sh };
+    /* Space the rows off the panel's own height - a fixed fraction left the
+       taller skins (GX) touching. */
+    const float sh2 = ph * scale;
+    float cy = sh2 * 0.5f + h * 0.045f;
+    const float cyMax = h * 0.5f - sh2 * 0.5f - h * 0.010f;
+    if (cy > cyMax) cy = cyMax;
+    const float ty[5] = { cy - topMargin, cy - topMargin,
+                          -cy - topMargin, -cy - topMargin,
+                          -topMargin };
+
+    g_np = np;
+    for (int i = 0; i < np; i++) {
+        snprintf(nm, sizeof nm, "ModSlot%d", i);
+        if (!panels[i]) continue;
+        /* Slot marks the spot; the holder underneath absorbs whatever offset the
+           panel prefab carries.  Measuring that beats predicting it - the skins
+           anchor and pivot their panels differently. */
+        void *wrt = make_wrapper(la, nm, tx[i], ty[i], scale);
+        if (!wrt) continue;
+        void *hold = new_rect(wrt, "ModPanelHold");
+        if (!hold) continue;
+        rect_set(hold, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f);
+        uint8_t keep = 0;
+        void *sp[2] = { hold, &keep };
+        inv(m_SetParent, panels[i], sp);
+        g_slot[i] = wrt; g_phold[i] = hold; g_panel[i] = panels[i];
+    }
+    g_psettle = 240;
+
+    g_capLen = -1; g_artLen = -1;
+    diff_caption(panels[0], panels[1], 6, 0);
+    nlog("4P: caption path depth %d", g_capLen);
+    { static int once; if (!once) { once = 1;
+        nlog("--- panel diff (Life01 vs Life02) ---");
+        dump_panel_diff(panels[0], panels[1], 5, ""); } }
+    g_labelled = 0;
+    {   /* LifeArea's parent is the Duel node that holds Reset / Undo / Menu */
+        void *duel = inv(meth(k_Transform, "get_parent", 0), la, NULL);
+        if (duel) arrange_buttons(duel);
+    }
+    g_wrappedArea = la;
+    nlog("4P: %d panels wrapped at scale %.3f (LifeArea now has %d children)", np, scale, tf_children(la));
+    for (int i = 0; i < tf_children(la) && i < 5; i++) {
+        void *c = tf_child(la, i);
+        char cn[64]; tf_name(c, cn, sizeof cn);
+        dump_rect(c, cn);
+    }
+}
+
+
+/* Hand the screen back exactly as the game built it.  StartDuel.SetCalcObject
+   looks its pieces up by path, so a ModSlot sitting where Life01 should be
+   makes OnEnable throw and the calculator comes up blank.  Everything is
+   rebuilt from scratch a few frames later, from Update. */
+static void mod_teardown(void *self) {
+    void *la   = find_life_area(self);
+    void *duel = tf_parent(la);
+    if (!duel) return;
+
+    void *row = find_child(duel, "ModButtonRow");
+    if (row) {
+        for (int i = 0; i < NBTN; i++) {
+            char cn[32], hn[32];
+            snprintf(cn, sizeof cn, "ModCell%s", g_btnName[i]);
+            snprintf(hn, sizeof hn, "ModHold%s", g_btnName[i]);
+            void *cell = find_child(row, cn);
+            void *hold = cell ? find_child(cell, hn) : NULL;
+            void *b    = (hold && tf_children(hold) > 0) ? tf_child(hold, 0) : NULL;
+            if (b && g_btnHome[i]) { reparent(b, g_btnHome[i]); set_sibling(b, g_btnHomeIdx[i]); }
+        }
+        discard(row);
+    }
+    void *menu = find_child(duel, "Menu");
+    set_active(find_child(duel, "Info"), 1);
+    set_active(find_child(menu, "SetBGM"), 1);
+    set_active(find_child(menu, "SearchCardByCamera"), 1);
+    if (g_quitHomeIdx >= 0) { set_sibling(find_child(duel, "Quit"), g_quitHomeIdx); g_quitHomeIdx = -1; }
+
+    if (la) {
+        for (int i = 0; i < 5; i++) {
+            char nm[16];
+            snprintf(nm, sizeof nm, "ModSlot%d", i);
+            void *slot = find_child(la, nm);
+            if (!slot) continue;
+            void *hold = find_child(slot, "ModPanelHold");
+            void *pan  = (hold && tf_children(hold) > 0) ? tf_child(hold, 0)
+                       : (tf_children(slot) > 0 ? tf_child(slot, 0) : NULL);
+            if (pan) reparent(pan, la);
+            discard(slot);
+        }
+        discard(find_child(la, "Life03"));
+        discard(find_child(la, "Life04"));
+        discard(find_child(la, "Life05"));
+    }
+
+    memset(g_btn, 0, sizeof g_btn);
+    memset(g_btnHome, 0, sizeof g_btnHome);
+    memset(g_slot, 0, sizeof g_slot);
+    memset(g_phold, 0, sizeof g_phold);
+    memset(g_panel, 0, sizeof g_panel);
+    g_np = 0; g_psettle = 0; g_labelled = 0; g_capLen = -1; g_capIsSprite = 0; g_artLen = -1;
+    g_row = NULL; g_settle = 0; g_wrappedArea = NULL; g_stableN = 0;
+    nlog("teardown: screen handed back in stock shape");
+}
+
+
+
+/* A skin's panel rect is often much bigger than the plate it draws, and the
+   plate sits off-centre inside it - mirrored between the left and right
+   prefabs, so it cancels out for the four corners but leaves the lone middle
+   panel looking shifted.  Align on the biggest graphic instead of the rect. */
+static void largest_image(void *tf, int depth, float *bestArea, void **best) {
+    if (!tf || depth < 0) return;
+    if (k_Image && get_comp(tf, k_Image)) {
+        float iw, ih;
+        rect_size(tf, &iw, &ih);
+        if (iw * ih > *bestArea) { *bestArea = iw * ih; *best = tf; }
+    }
+    int n = tf_children(tf);
+    for (int i = 0; i < n; i++) largest_image(tf_child(tf, i), depth - 1, bestArea, best);
+}
+static int drawn_centre(void *tf, float *cx, float *cy) {
+    float area = 0.0f;
+    void *best = NULL;
+    largest_image(tf, 3, &area, &best);
+    return world_centre(best ? best : tf, cx, cy);
+}
+
+/* Same trick as the button row: the panels are moved by game code every frame,
+   so nudge the parent we own until each one sits on its slot. */
+static void settle_panels(void) {
+    if (!g_np) return;
+    if (g_psettle > 0) g_psettle--;
+
+    /* The plate a skin draws is not centred in its panel rect.  The left and
+       right prefabs mirror that offset, so it cancels across the four corners
+       but leaves the lone middle panel looking pushed to one side.  Measure it
+       from the mirrored pair - the reading only has to be *consistent* between
+       the two, not absolutely right - and take out half of it.  (The quarter
+       coefficient is because the pair's readings differ by twice the offset,
+       and the correction wanted is half of that again; calibrated against the
+       measured result rather than assumed.) */
+    float mid = 0.0f;
+    if (g_np == 5) {
+        float a0x, a0y, s0x, s0y, a1x, a1y, s1x, s1y;
+        if (drawn_centre(g_panel[0], &a0x, &a0y) && world_centre(g_slot[0], &s0x, &s0y) &&
+            drawn_centre(g_panel[1], &a1x, &a1y) && world_centre(g_slot[1], &s1x, &s1y))
+            mid = ((a0x - s0x) - (a1x - s1x)) * 0.25f;
+    }
+
+    /* the localiser fills the caption in a frame or two after the screen opens,
+       so keep trying until there is text to diff, then rewrite the clones once */
+    if (!g_labelled && g_psettle > 0) {
+        if (g_capLen < 0) { g_capLen = -1; g_artLen = -1; diff_caption(g_panel[0], g_panel[1], 6, 0); }
+        if (g_capLen >= 0) {
+            for (int i = 2; i < g_np; i++) {
+                char cap[16];
+                snprintf(cap, sizeof cap, "Duelist %d", i + 1);
+                label_panel(g_panel[i], cap);
+            }
+            g_labelled = 1;
+        }
+    }
+
+    for (int i = 0; i < g_np; i++) {
+        float sx, sy, px, py, hx, hy, hz;
+        if (!world_centre(g_slot[i],  &sx, &sy)) continue;
+        if (!world_centre(g_panel[i], &px, &py)) continue;
+        if (!world_pos(g_phold[i], &hx, &hy, &hz)) continue;
+        if (i == 4) sx -= mid;
+        float ex = sx - px, ey = sy - py;
+        if (ex * ex + ey * ey < 0.0001f) continue;
+        set_world(g_phold[i], hx + ex, hy + ey, hz);
+    }
+}
+
+static void (*orig_StartDuel_Update)(void *, void *);
+static void (*orig_StartDuel_OnDisable)(void *, void *);
+
+/* The game re-lays out the panels from its own coroutine after OnEnable, so the
+   arrangement has to be re-asserted rather than applied once. */
+static void my_StartDuel_Update(void *self, void *mi) {
+    if (orig_StartDuel_Update) orig_StartDuel_Update(self, mi);
+    if (g_selMode >= 3) {
+        build_four_player_layout(self);   /* no-op once wrapped */
+        settle_buttons();
+        settle_panels();
+    }
+}
+
+static void my_StartDuel_OnDisable(void *self, void *mi) {
+    /* the teardown also keys off g_CalcMode, so it has to run while still masked */
+    if (orig_StartDuel_OnDisable) orig_StartDuel_OnDisable(self, mi);
+    if (g_selMode >= 3) write_calc_mode(g_selMode);
+    g_wrappedArea = NULL;
+    g_row = NULL; g_settle = 0;
+    nlog("StartDuel.OnDisable: g_CalcMode restored to %d", g_selMode);
+}
+
+static void my_StartDuel_OnEnable(void *self, void *mi) {
+    /* StartDuel switches on g_CalcMode to choose a calculator canvas and knows
+       nothing about 3/4, so let it build the normal 2-screen layout, then convert. */
+    mod_teardown(self);          /* the game is about to walk this hierarchy */
+    int mode = read_calc_mode();
+    g_selMode = mode;            /* 2 players means 2 players again, stock layout */
+    if (mode >= 3) write_calc_mode(0);   /* stays masked until OnDisable */
+    if (orig_StartDuel_OnEnable) orig_StartDuel_OnEnable(self, mi);
+    nlog("StartDuel.OnEnable: g_CalcMode=%d masked to 0 for the duration", mode);
+    if (g_duel_dumped) return;
+    g_duel_dumped = 1;
+    nlog("=== StartDuel.OnEnable: mapping the calculator ===");
+    int *pn = (int *)fld(self, "PlayerNum");
+    nlog("PlayerNum=%d  savedExtraMode=%d", pn ? *pn : -1, g_selMode);
+
+    struct { const char *name; int off; } objs[] = {
+        { "CalculatorCanvas",         144 },
+        { "CalculatorCanvasVertical", 152 },
+        { "CalculatorMulti",          176 },
+        { "CalculatorSingleVertical", 184 },
+        { "CalculatorSingle",         192 },
+        { "CurrentCalculator",        216 },
+    };
+    for (int i = 0; i < 6; i++) {
+        void *go = *(void **)((char *)self + objs[i].off);
+        nlog("--- %s = %p ---", objs[i].name, go);
+        if (!go) continue;
+        void *gtf = inv(m_go_get_transform, go, NULL);
+        if (gtf) { dump_rect(gtf, objs[i].name); dump_tree(gtf, 0, 3, objs[i].name); }
+    }
+
+    /* the two duelist panels live under Duel/LifeArea */
+    {
+        void *multi0 = *(void **)((char *)self + 176);
+        void *mtf0 = multi0 ? inv(m_go_get_transform, multi0, NULL) : NULL;
+        void *duel = mtf0 ? tf_child(mtf0, 1) : NULL;          /* "Duel" */
+        void *lifeArea = NULL;
+        if (duel) {
+            int dn = tf_children(duel);
+            for (int i = 0; i < dn; i++) {
+                void *c = tf_child(duel, i);
+                char nm[64]; tf_name(c, nm, sizeof nm);
+                if (!strcmp(nm, "LifeArea")) { lifeArea = c; break; }
+            }
+        }
+        nlog("--- LifeArea = %p ---", lifeArea);
+        if (lifeArea) {
+            dump_rect(lifeArea, "LifeArea");
+            int ln = tf_children(lifeArea);
+            for (int i = 0; i < ln; i++) {
+                void *c = tf_child(lifeArea, i);
+                char nm[64]; tf_name(c, nm, sizeof nm);
+                dump_rect(c, nm);
+            }
+            void *l1 = tf_child(lifeArea, 0);
+            if (l1) {
+                nlog("--- Life01 internals ---");
+                dump_tree(l1, 0, 2, "Life01");
+                int cn = tf_children(l1);
+                for (int i = 0; i < cn; i++) {
+                    void *c = tf_child(l1, i);
+                    char nm[64]; tf_name(c, nm, sizeof nm);
+                    dump_rect(c, nm);
+                }
+            }
+        }
+    }
+
+    /* geometry of the two duelist panels inside CalculatorMulti */
+    void *multi = *(void **)((char *)self + 176);
+    void *mtf = multi ? inv(m_go_get_transform, multi, NULL) : NULL;
+    if (mtf) {
+        nlog("--- CalculatorMulti children geometry ---");
+        int n = tf_children(mtf);
+        for (int i = 0; i < n; i++) {
+            void *c = tf_child(mtf, i);
+            char nm[64]; tf_name(c, nm, sizeof nm);
+            dump_rect(c, nm);
+        }
+    }
+    {
+        void *aui2 = il2cpp_domain_assembly_open(g_domain, "UnityEngine.UI");
+        void *iui2 = aui2 ? il2cpp_assembly_get_image(aui2) : NULL;
+        struct { void *img; const char *ns, *nm; } probe[] = {
+            { g_img_cs,   "UISystem", "TweenScale" },
+            { g_img_cs,   "UISystem", "TweenScaleFrom" },
+            { g_img_cs,   "UISystem", "TweenScaleTo" },
+            { g_img_cs,   "UISystem", "TweenPosition" },
+            { g_img_cs,   "UISystem", "Tween" },
+            { g_img_core, "UnityEngine", "Animator" },
+            { g_img_core, "UnityEngine", "Animation" },
+            { iui2,       "UnityEngine.UI", "LayoutElement" },
+            { iui2,       "UnityEngine.UI", "ContentSizeFitter" },
+            { iui2,       "UnityEngine.UI", "AspectRatioFitter" },
+            { iui2,       "UnityEngine.UI", "HorizontalLayoutGroup" },
+            { iui2,       "UnityEngine.UI", "VerticalLayoutGroup" },
+            { iui2,       "UnityEngine.UI", "GridLayoutGroup" },
+        };
+        void *la2 = find_life_area(self);
+        void *spots2[2] = { la2, la2 ? tf_child(la2, 0) : NULL };
+        const char *spotname[2] = { "LifeArea", "Life01" };
+        for (int t = 0; t < 2; t++) {
+            if (!spots2[t]) continue;
+            char line[512]; line[0] = 0;
+            for (unsigned i = 0; i < sizeof probe / sizeof probe[0]; i++) {
+                if (!probe[i].img) continue;
+                void *k = il2cpp_class_from_name(probe[i].img, probe[i].ns, probe[i].nm);
+                if (k && get_comp(spots2[t], k)) {
+                    strncat(line, probe[i].nm, sizeof line - strlen(line) - 2);
+                    strncat(line, " ", sizeof line - strlen(line) - 2);
+                }
+            }
+            nlog("components on %s: %s", spotname[t], line[0] ? line : "(none of the probed)");
+        }
+    }
+    if (g_selMode >= 3) build_four_player_layout(self);   /* both extra modes use the 4-panel grid while we tune it */
+    nlog("=== duel screen mapped ===");
+}
+
+static uint8_t (*orig_FixLayout_MoveNext)(void *, void *);
+
+/* Calculator.FixLayout is a coroutine: it repaints the three stock radios a frame
+   after OnEnable, which would leave both its row and ours lit.  Repaint after it. */
+static uint8_t my_FixLayout_MoveNext(void *self, void *mi) {
+    uint8_t r = orig_FixLayout_MoveNext ? orig_FixLayout_MoveNext(self, mi) : 0;
+    if (g_selMode >= 3 && g_container && g_onSprite) apply_selection(g_container, g_selMode);
+    return r;
+}
+
+/* find a class by bare name anywhere in an image (handles compiler-generated nested types) */
+static void *find_class_by_name(void *image, const char *name) {
+    if (!image || !il2cpp_image_get_class_count) return NULL;
+    size_t n = il2cpp_image_get_class_count(image);
+    for (size_t i = 0; i < n; i++) {
+        void *k = il2cpp_image_get_class(image, i);
+        if (!k) continue;
+        const char *kn = il2cpp_class_get_name(k);
+        if (kn && !strcmp(kn, name)) return k;
+    }
+    return NULL;
+}
+
+static void my_OnClickCalcMode(void *self, int number, void *mi) {
+    nlog("OnClickCalcMode(%d)", number);
+    /* The stock handler stores g_CalcMode = number and, for 3/4, paints no radio at
+       all (verified in the disassembly), so letting it run is what makes the choice
+       persist.  We only add the highlight for our own rows afterwards. */
+    if (orig_OnClickCalcMode) orig_OnClickCalcMode(self, number, mi);
+    save_mode(number >= 3 ? number : -1);
+    apply_selection(g_container, number);
+}
+static int g_dumped = 0;
+
+static void my_OnEnable(void *self, void *mi) {
+    if (orig_OnEnable) orig_OnEnable(self, mi);
+    if (g_dumped) return;
+    g_dumped = 1;
+    nlog("=== Calculator.OnEnable: adding modes ===");
+    void *tf = inv(m_get_transform, self, NULL);
+    void *node = tf;
+    int path[6] = { 0, 0, 0, 0, 1, 0 };   /* ScrollView/Viewport/CalculatorSettings/Mode/Content/Toggle */
+    for (int i = 0; i < 6 && node; i++) node = tf_child(node, path[i]);
+    if (!node) { nlog("could not reach the mode toggle container"); return; }
+    char nm[64]; tf_name(node, nm, sizeof nm);
+    int n = tf_children(node);
+    nlog("toggle container '%s' has %d rows", nm, n);
+    if (n != 3 && n != 5) { nlog("unexpected row count %d, not touching it", n); return; }
+
+    void *srcTf = tf_child(node, 0);                 /* the "Multi" row = "2 screens" */
+    void *srcGo = srcTf ? inv(m_get_gameObject, srcTf, NULL) : NULL;
+    if (!srcGo) { nlog("no source row"); return; }
+
+    capture_sprites(self, node);
+    g_container = node;
+
+    if (n == 3) {
+        clone_row(srcGo, node, "Four", "4 screens", 3);
+        clone_row(srcGo, node, "Five", "5 screens", 4);
+        nlog("container now has %d rows", tf_children(node));
+    } else {
+        nlog("extra rows already present, reusing them");
+    }
+
+    int cur = read_calc_mode();
+    if (cur >= 3) g_selMode = cur;
+    nlog("g_CalcMode=%d selMode=%d", cur, g_selMode);
+    apply_selection(node, cur);
+    nlog("=== done ===");
+}
+
+static void *worker(void *a) {
+    (void)a;
+    nlog("=== neuronmod loaded, pid=%d ===", getpid());
+    for (int i = 0; i < 600 && !L; i++) {
+        L = dlopen("libil2cpp.so", RTLD_NOW | RTLD_NOLOAD);
+        if (!L) usleep(100000);
+    }
+    if (!L) { nlog("no libil2cpp"); return NULL; }
+    g_base = module_base("libil2cpp.so");
+    nlog("libil2cpp base = %p", (void *)g_base);
+
+    SYM(il2cpp_domain_get); SYM(il2cpp_thread_attach); SYM(il2cpp_domain_assembly_open);
+    SYM(il2cpp_assembly_get_image); SYM(il2cpp_class_from_name);
+    SYM(il2cpp_class_get_method_from_name); SYM(il2cpp_class_get_fields);
+    SYM(il2cpp_field_get_name); SYM(il2cpp_field_get_offset); SYM(il2cpp_field_get_type);
+    SYM(il2cpp_type_get_name); SYM(il2cpp_object_get_class); SYM(il2cpp_class_get_name);
+    SYM(il2cpp_runtime_invoke); SYM(il2cpp_object_unbox);
+    SYM(il2cpp_string_chars); SYM(il2cpp_string_length);
+    SYM(il2cpp_type_get_object); SYM(il2cpp_class_get_type); SYM(il2cpp_string_new);
+    SYM(il2cpp_array_length); SYM(il2cpp_object_new);
+    SYM(il2cpp_class_get_methods); SYM(il2cpp_method_get_name);
+    SYM(il2cpp_method_get_param_count); SYM(il2cpp_method_get_param);
+    SYM(il2cpp_method_is_generic);
+    SYM(il2cpp_class_get_field_from_name); SYM(il2cpp_class_get_parent);
+    SYM(il2cpp_field_static_get_value); SYM(il2cpp_field_static_set_value);
+    SYM(il2cpp_image_get_class_count); SYM(il2cpp_image_get_class);
+
+    g_selMode = load_mode();
+    nlog("persisted extra mode = %d", g_selMode);
+
+    sleep(3);
+    for (int i = 0; i < 900; i++) {
+        g_domain = il2cpp_domain_get();
+        if (g_domain) break;
+        usleep(200000);
+    }
+    nlog("domain = %p", g_domain);
+    if (!g_domain) return NULL;
+    il2cpp_thread_attach(g_domain);
+
+    void *a1 = il2cpp_domain_assembly_open(g_domain, "Assembly-CSharp");
+    g_img_cs = a1 ? il2cpp_assembly_get_image(a1) : NULL;
+    unity_init();
+
+    void *calc = cls(g_img_cs, "", "Calculator");
+    void *mi = meth(calc, "OnEnable", 0);
+    nlog("Calculator=%p OnEnable MethodInfo=%p", calc, mi);
+    if (mi) {
+        void **slot = (void **)mi;
+        void *page = (void *)((uintptr_t)slot & ~(uintptr_t)(getpagesize() - 1));
+        if (mprotect(page, getpagesize() * 2, PROT_READ | PROT_WRITE) == 0) {
+            orig_OnEnable = (void (*)(void *, void *))slot[0];
+            slot[0] = (void *)my_OnEnable;
+            slot[1] = (void *)my_OnEnable;
+            nlog("hooked Calculator.OnEnable (orig=%p)", (void *)orig_OnEnable);
+        }
+    }
+    void *mclick = meth(calc, "OnClickCalcMode", 1);
+    if (mclick) {
+        void **slot = (void **)mclick;
+        void *page = (void *)((uintptr_t)slot & ~(uintptr_t)(getpagesize() - 1));
+        if (mprotect(page, getpagesize() * 2, PROT_READ | PROT_WRITE) == 0) {
+            orig_OnClickCalcMode = (void (*)(void *, int, void *))slot[0];
+            slot[0] = (void *)my_OnClickCalcMode;
+            slot[1] = (void *)my_OnClickCalcMode;
+            nlog("hooked Calculator.OnClickCalcMode (orig=%p)", (void *)orig_OnClickCalcMode);
+        }
+    }
+    void *sd = cls(g_img_cs, "", "StartDuel");
+    void *msd = sd ? meth(sd, "OnEnable", 0) : NULL;
+    if (msd) {
+        void **slot = (void **)msd;
+        void *page = (void *)((uintptr_t)slot & ~(uintptr_t)(getpagesize() - 1));
+        if (mprotect(page, getpagesize() * 2, PROT_READ | PROT_WRITE) == 0) {
+            orig_StartDuel_OnEnable = (void (*)(void *, void *))slot[0];
+            slot[0] = (void *)my_StartDuel_OnEnable;
+            slot[1] = (void *)my_StartDuel_OnEnable;
+            nlog("hooked StartDuel.OnEnable (orig=%p)", (void *)orig_StartDuel_OnEnable);
+        }
+    }
+    void *kfix = find_class_by_name(g_img_cs, "<FixLayout>d__23");
+    void *mfix = kfix ? meth(kfix, "MoveNext", 0) : NULL;
+    nlog("FixLayout coroutine class=%p MoveNext=%p", kfix, mfix);
+    if (mfix) {
+        void **slot = (void **)mfix;
+        void *page = (void *)((uintptr_t)slot & ~(uintptr_t)(getpagesize() - 1));
+        if (mprotect(page, getpagesize() * 2, PROT_READ | PROT_WRITE) == 0) {
+            orig_FixLayout_MoveNext = (uint8_t (*)(void *, void *))slot[0];
+            slot[0] = (void *)my_FixLayout_MoveNext;
+            slot[1] = (void *)my_FixLayout_MoveNext;
+            nlog("hooked FixLayout.MoveNext");
+        }
+    }
+    if (sd) {
+        struct { const char *name; void **orig; void *repl; } more[] = {
+            { "Update",    (void **)&orig_StartDuel_Update,    (void *)my_StartDuel_Update },
+            { "OnDisable", (void **)&orig_StartDuel_OnDisable, (void *)my_StartDuel_OnDisable },
+        };
+        for (int i = 0; i < 2; i++) {
+            void *m = meth(sd, more[i].name, 0);
+            if (!m) continue;
+            void **slot = (void **)m;
+            void *page = (void *)((uintptr_t)slot & ~(uintptr_t)(getpagesize() - 1));
+            if (mprotect(page, getpagesize() * 2, PROT_READ | PROT_WRITE) != 0) continue;
+            *more[i].orig = slot[0];
+            slot[0] = more[i].repl;
+            slot[1] = more[i].repl;
+            nlog("hooked StartDuel.%s", more[i].name);
+        }
+    }
+    nlog("=== neuronmod ready ===");
+    return NULL;
+}
+
+/* listens for instruction text pushed from the dev machine and toasts it */
+static void *instr_worker(void *a) {
+    (void)a;
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) return NULL;
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(INSTR_PORT);
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(fd, (struct sockaddr *)&sa, sizeof sa) != 0) {
+        nlog("instruction socket bind failed");
+        close(fd);
+        return NULL;
+    }
+    nlog("instruction channel listening on 127.0.0.1:%d", INSTR_PORT);
+    close(fd);
+    /* UDP from another app does not reach us on this device, so poll a file
+       that adb shell can write into our external files dir instead */
+    const char *path = "/storage/emulated/0/Android/data/jp.konami.YugiohOcgSupports/files/neuronmod.say";
+    struct stat st;
+    time_t last_m = 0;
+    off_t last_sz = -1;
+    int announced = 0;
+    for (;;) {
+        if (stat(path, &st) == 0) {
+            if (!announced) { nlog("instruction file found: %s", path); announced = 1; }
+            if (st.st_mtime != last_m || st.st_size != last_sz) {
+                last_m = st.st_mtime;
+                last_sz = st.st_size;
+                FILE *f = fopen(path, "r");
+                if (f) {
+                    char buf[512];
+                    size_t n = fread(buf, 1, sizeof buf - 1, f);
+                    fclose(f);
+                    buf[n] = 0;
+                    while (n && (buf[n - 1] == 0x0a || buf[n - 1] == 0x0d)) buf[--n] = 0;
+                    if (n) { nlog("instruction: %s", buf); toast(buf); }
+                }
+            }
+        }
+        usleep(400000);
+    }
+    return NULL;
+}
+
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *r) {
+    (void)r;
+    g_vm = vm;
+    JNIEnv *env = NULL;
+    if ((*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6) == JNI_OK) {
+        jclass c = (*env)->FindClass(env, "neuron/mod/Toaster");
+        if (c) {
+            g_toaster = (jclass)(*env)->NewGlobalRef(env, c);
+            g_show = (*env)->GetStaticMethodID(env, g_toaster, "show", "(Ljava/lang/String;Z)V");
+        }
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    }
+    pthread_t t; pthread_create(&t, NULL, worker, NULL); pthread_detach(t);
+    pthread_t t2; pthread_create(&t2, NULL, instr_worker, NULL); pthread_detach(t2);
+    return JNI_VERSION_1_6;
+}

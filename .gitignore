@@ -1,0 +1,29 @@
+# --- never commit: signing material ---------------------------------------
+# A new key means Android refuses the upgrade and the user has to uninstall,
+# wiping his duel history.  The keystore lives on this phone only.
+keys/*.jks
+keys/keystore.env
+
+# --- never commit: the game itself ----------------------------------------
+# apk/decoded is Konami's decompiled smali, assets and resources; apk/extracted
+# is the raw apk payload; apk/dist holds 100 MB+ signed builds (over GitHub's
+# per-file limit anyway).  None of it is ours to publish.
+apk/decoded/
+apk/extracted/
+apk/dist/
+*.apk
+*.idsig
+
+# --- build output (regenerable from src/) ---------------------------------
+build/libneuronmod.so
+build/neuron-mod-unsigned.apk
+build/java-classes/
+*.o
+*.so
+
+# --- scratch --------------------------------------------------------------
+*.log
+modlog*.txt
+__pycache__/
+*.pyc
+*.png.tmp
