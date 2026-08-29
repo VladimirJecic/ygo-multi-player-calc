@@ -119,7 +119,19 @@ v233 fixed Duel Monsters (3) and v234 ZEXAL (6), both accepted. Seven of the eig
 now satisfy US-04; only VRAINS (8) is left, and it has not been looked at since v231.
 
 The three-player calculator (US-06, US-07) landed at v249 and is accepted on all eight
-designs.
+designs. Subtracting and adding life points, and renaming, were checked with three players at
+v249 and work.
+
+**The app restarting when you switch away and back is not reproducing any more**, and nothing
+was changed that would explain it, so treat the cause as unknown rather than fixed. What is
+known: the game is a ~1 GB process (TOTAL PSS 1070 MB, of which 474 MB graphics) on a phone
+with about 1.5 GB free, so it is the obvious candidate whenever Android needs memory back —
+`app died, no saved state` is that shape. Switching to it and back with `input keyevent
+KEYCODE_HOME` kept the same pid and loaded the mod once, so plain backgrounding does not do it.
+
+Cutting that resident gigabyte would be the real remedy, and it belongs with the goal the app
+is named for: 699 MB down to 190 MB on disk was the easy half, and 1 GB in memory is the half
+still open.
 See `userstories/US-04`.
 
 The three defects reported against v230 on 2026-08-29 resolved as follows.

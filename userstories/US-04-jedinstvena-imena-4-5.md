@@ -1,6 +1,6 @@
 # US-04 — Promena imena olovčicom, bez duplikata (4 i 5 ekrana)
 
-**Status:** radi na 1-7; ostaje samo VRAINS (8)   **Poslednja provera:** v234
+**Status:** radi na 1-7; ostaje samo VRAINS (8) — vidi US-08   **Poslednja provera:** v249
 
 ## Kako je zahtev postavljen
 > "korisnik aplikacije na svakom ekranu ima opciju da klikom na olovčicu promeni svoje ime.
