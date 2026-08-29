@@ -80,8 +80,13 @@ starts from an empty Log rather than the previous session's test duels. A marker
 delete because the shell user cannot reach the app's private directory, which is where the
 database lives.
 
-This clears **the mod's own table of life points per duel**. The game's own Log Archive list is
-its data, not ours, and is left alone.
+It clears the mod's own table of life points per duel, and from v239 the game's own Log Archive
+list as well — emptied and written back through `SaveData.SaveLogArchives`, so it stays empty.
+Nothing under the app's `files/` holds those archives, so where they actually live is left as
+the game's business.
+
+The archive list is cleared the first time the Log is opened after the build, not at load: the
+IL2CPP runtime is not attached yet when the marker is read.
 
 **The base is always the previous apk**, not a pristine one. The patched `classes.dex`, the
 added `classes4.dex` and the restored asset bundles all ride along inside it. This is why

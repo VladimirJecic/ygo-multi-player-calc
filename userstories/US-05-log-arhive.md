@@ -41,5 +41,7 @@ Od v237 svaki bild briše modovu bazu sačuvanih partija (`files/neuronmod.logdb
 kretao pun testnih duela iz prethodne sesije. `build.sh` ostavi marker pored igrinih eksternih
 fajlova, mod ga na sledećem startu vidi, obriše bazu i ukloni marker — jednokratno po bildu.
 
-Briše se **modova tabela životnih poena po duelu**. Igrina sopstvena lista Log Archives je
-njeni podaci, ne naši, i ne dira se.
+Briše se modova tabela životnih poena po duelu, a od v239 i **igrina sopstvena lista Log
+Archives** — isprazni se i upiše nazad kroz `SaveData.SaveLogArchives`, pa ostane prazna.
+Lista se prazni pri prvom otvaranju Loga posle bilda, ne pri učitavanju: runtime tada još nije
+prikačen.

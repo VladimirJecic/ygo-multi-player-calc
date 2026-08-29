@@ -3578,11 +3578,38 @@ static void table_rows(void *ct, int nc, const int *start, const int (*lifeTbl)[
    shell user cannot reach the app's private directory, where LOGDB is. */
 #define WIPE_MARK "/storage/emulated/0/Android/data/jp.konami.YugiohOcgSupports/files/neuronmod.wipe"
 
+static int g_wipeArchives;
+
 static void logdb_wipe_if_asked(void) {
     if (access(WIPE_MARK, F_OK) != 0) return;
     int gone = (unlink(LOGDB) == 0);
     unlink(WIPE_MARK);
+    g_wipeArchives = 1;
     nlog("logdb: fresh build, saved duels %s", gone ? "cleared" : "were already empty");
+}
+
+/* Empty the game's own archive list.  Run from the Log hooks, never at load:
+   the runtime is not attached yet when the marker is read. */
+static void archives_clear(void) {
+    if (!g_wipeArchives) return;
+    g_wipeArchives = 0;
+    void *klm = cls(g_img_cs, "", "LogArchiveManager");
+    void *f = klm ? il2cpp_class_get_field_from_name(klm, "<LogArchives>k__BackingField") : NULL;
+    if (!f) { nlog("logdb: no LogArchives field to clear"); return; }
+    void *list = NULL;
+    il2cpp_field_static_get_value(f, &list);
+    if (!list) { nlog("logdb: archive list not built yet"); return; }
+    int before = *(int *)((char *)list + 24);
+    void *lc = il2cpp_object_get_class(list);
+    void *mClear = lc ? il2cpp_class_get_method_from_name(lc, "Clear", 0) : NULL;
+    if (mClear) inv(mClear, list, NULL);
+    /* Persist through the game's own writer.  Nothing under files/ holds the
+       archives, so where they actually live stays the game's business. */
+    void *ksd = cls(g_img_cs, "", "SaveData");
+    void *mSave = ksd ? il2cpp_class_get_method_from_name(ksd, "SaveLogArchives", 1) : NULL;
+    if (mSave) { void *a[1] = { list }; inv(mSave, NULL, a); }
+    nlog("logdb: game archive list %d -> %d, saved=%s",
+         before, *(int *)((char *)list + 24), mSave ? "yes" : "NO");
 }
 
 static int  g_arcNp, g_arcN;
@@ -4342,7 +4369,9 @@ static void *list_root(void *self) {
 }
 
 static void (*orig_LogList_OnEnable)(void *, void *);
+static void archives_clear(void);
 static void my_LogList_OnEnable(void *self, void *mi) {
+    archives_clear();
     if (orig_LogList_OnEnable) orig_LogList_OnEnable(self, mi);
     void *tf = list_root(self);
     if (tf) { fix_row_labels(tf, 8); stamp_rows(tf); }
@@ -4350,6 +4379,7 @@ static void my_LogList_OnEnable(void *self, void *mi) {
 
 static void (*orig_DisplayLogList)(void *, void *);
 static void my_DisplayLogList(void *self, void *mi) {
+    archives_clear();
     if (orig_DisplayLogList) orig_DisplayLogList(self, mi);
     void *tf = list_root(self);
     if (tf) { fix_row_labels(tf, 8); stamp_rows(tf); }
