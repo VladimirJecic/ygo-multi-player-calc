@@ -13,10 +13,15 @@ APK=${1:?usage: install.sh <path-to-apk>}
 
 # The staging copy is made by the shell user, so the source has to be somewhere
 # it can read - shared storage, not Termux's private directory.
+TEMP=
 case $APK in
   /storage/*|/sdcard/*) SRC=$APK ;;
-  *) SRC=/storage/emulated/0/Download/$(basename "$APK")
-     cp -f "$APK" "$SRC" ;;
+  *) SRC=/storage/emulated/0/Download/.install-$(basename "$APK")
+     cp -f "$APK" "$SRC"; TEMP=$SRC ;;
 esac
 
 "$DIR/shell.sh" "cp '$SRC' /data/local/tmp/install.apk && pm install -r /data/local/tmp/install.apk; rm -f /data/local/tmp/install.apk"
+rc=$?
+# Do not leave a 100 MB copy lying in Downloads.
+[ -n "$TEMP" ] && rm -f "$TEMP"
+exit $rc

@@ -632,8 +632,19 @@ static void dump_panel_diff(void *a, void *b, int depth, const char *path) {
         dump_panel_diff(tf_child(a, i), tf_child(b, i), depth - 1, here);
 }
 
+/* The caption is found by walking the two stock panels in lockstep and noting
+   the child indices, but it must not be *resolved* that way afterwards.
+   label_panel re-siblings the caption to the end of its parent so the skin's
+   own bar cannot paint over it, and that renumbers everything after it - so on
+   the next frame the same index path pointed at the next node along.  The
+   caption walked TextPlayer -> PlayerName -> Text_obj -> Image, one node per
+   frame, writing the name into a different node each time and clearing the one
+   before it.  That is the flicker: the name was never in one place long enough
+   to be seen, and ended up in a sprite node that cannot draw text at all.
+   Resolve by name instead - names survive reordering. */
 #define CAPMAX 8
 static int g_capPath[CAPMAX];
+static char g_capName[64], g_artName[64], g_txtName[64], g_difName[64];
 static int g_capLen = -1;
 static int g_capIsSprite;
 static int g_artPath[CAPMAX];
@@ -675,6 +686,7 @@ static int diff_caption(void *a, void *b, int depth, int len) {
             if (!strstr(nm, "Life") && g_difLen < 0) {
                 for (int k = 0; k < len; k++) g_difPath[k] = g_capPath[k];
                 g_difLen = len;
+                snprintf(g_difName, sizeof g_difName, "%s", nm);
             }
         }
         /* Duel Monsters and VRAINS draw the caption as artwork and leave the
@@ -692,6 +704,7 @@ static int diff_caption(void *a, void *b, int depth, int len) {
             if ((strstr(nm, "Name") || strstr(nm, "Player")) && !strstr(nm, "Life")) {
                 for (int k = 0; k < len; k++) g_txtPath[k] = g_capPath[k];
                 g_txtLen = len;
+                snprintf(g_txtName, sizeof g_txtName, "%s", nm);
                 nlog("cap: blank name field '%s' at depth %d", nm, len);
             }
         }
@@ -718,6 +731,7 @@ static int diff_caption(void *a, void *b, int depth, int len) {
                    skins carry both, and leaving the art on stacks two captions */
                 for (int k = 0; k < len; k++) g_artPath[k] = g_capPath[k];
                 g_artLen = len;
+                snprintf(g_artName, sizeof g_artName, "%s", nm);
             }
         }
     }
@@ -737,15 +751,18 @@ static int diff_caption(void *a, void *b, int depth, int len) {
            could not read it. */
         if (g_difLen >= 0) {
             for (int k = 0; k < g_difLen; k++) g_capPath[k] = g_difPath[k];
-            g_capLen = g_difLen; g_capIsSprite = 0; return 1;
+            g_capLen = g_difLen; g_capIsSprite = 0;
+            snprintf(g_capName, sizeof g_capName, "%s", g_difName); return 1;
         }
         if (g_txtLen >= 0) {
             for (int k = 0; k < g_txtLen; k++) g_capPath[k] = g_txtPath[k];
-            g_capLen = g_txtLen; g_capIsSprite = 0; return 1;
+            g_capLen = g_txtLen; g_capIsSprite = 0;
+            snprintf(g_capName, sizeof g_capName, "%s", g_txtName); return 1;
         }
         if (g_artLen >= 0) {
             for (int k = 0; k < g_artLen; k++) g_capPath[k] = g_artPath[k];
-            g_capLen = g_artLen; g_capIsSprite = 1; return 1;
+            g_capLen = g_artLen; g_capIsSprite = 1;
+            snprintf(g_capName, sizeof g_capName, "%s", g_artName); return 1;
         }
     }
     return 0;
@@ -761,6 +778,23 @@ static void *node_path(void *root, const int *path, int len) {
     return t;
 }
 static void *node_at(void *root, int len) { return node_path(root, g_capPath, len); }
+
+/* Resolve a remembered node on one panel.  By name first: label_panel re-siblings
+   the caption to the end of its parent, which renumbers the children after it, so
+   the index path the search recorded is only good until the first write.  The
+   path stays as the fallback for a skin whose node has no usable name. */
+static void *by_name(void *panelTf, const char *nm, const int *path, int len) {
+    if (!panelTf || len < 0) return NULL;
+    if (nm && nm[0]) {
+        void *t = find_deep(panelTf, nm, 5);
+        if (t) return t;
+    }
+    return node_path(panelTf, path, len);
+}
+static void *cap_node(void *panelTf) {
+    if (g_capLen < 0) return NULL;
+    return by_name(panelTf, g_capName, g_capPath, g_capLen);
+}
 
 
 /* Is the caption search looking at a panel that has finished drawing itself?
@@ -784,7 +818,7 @@ static int panel_ready(void *panelTf) {
 /* Never let the caption land on the score itself. */
 static int caption_is_the_score(void *panelTf) {
     if (g_capLen < 0 || !panelTf) return 0;
-    void *node = node_at(panelTf, g_capLen);
+    void *node = cap_node(panelTf);
     if (!node) return 0;
     void *lp = find_deep(panelTf, "LifePoints", 4);
     return node == lp;
@@ -1055,7 +1089,7 @@ static void copy_rect(void *dst, void *src) {
 
 static void label_panel(void *panelTf, const char *text) {
     if (!panelTf || g_capLen < 0) return;
-    void *node = node_at(panelTf, g_capLen);
+    void *node = cap_node(panelTf);
     if (!node) return;
     if (!g_capIsSprite) {
         set_active(node, 1);           /* the blank name field ships switched off */
@@ -1073,8 +1107,8 @@ static void label_panel(void *panelTf, const char *text) {
         int haveStock = 0;
         {
             void *stock = NULL;
-            if (g_difLen >= 0) stock = node_path(panelTf, g_difPath, g_difLen);
-            if (!stock && g_artLen >= 0) stock = node_path(panelTf, g_artPath, g_artLen);
+            if (g_difLen >= 0) stock = by_name(panelTf, g_difName, g_difPath, g_difLen);
+            if (!stock && g_artLen >= 0) stock = by_name(panelTf, g_artName, g_artPath, g_artLen);
             if (stock && stock != node) haveStock = world_centre(stock, &stockX, &stockY);
         }
         {   /* A caption that measures nothing has a font it cannot draw with.
@@ -1122,7 +1156,9 @@ static void label_panel(void *panelTf, const char *text) {
                and still nothing showed. */
             void *par = tf_parent(node);
             int n = par ? tf_children(par) : 0;
-            if (n > 1) set_sibling(node, n - 1);
+            /* Only if it is not already there.  Re-siblinging every frame
+               reorders the parent every frame for no gain. */
+            if (n > 1 && tf_child(par, n - 1) != node) set_sibling(node, n - 1);
         }
         /* ZEXAL splits the caption in two: a fixed DUELIST in the parent with
            just the number underneath it, which is the half the diff finds.  A
@@ -1171,12 +1207,12 @@ static void label_panel(void *panelTf, const char *text) {
                                   from its own two duelist names, and on Standard
                                   that came out as a clipped second copy beside
                                   ours */
-            void *other = node_path(panelTf, g_txtPath, g_txtLen);
+            void *other = by_name(panelTf, g_txtName, g_txtPath, g_txtLen);
             if (other && other != node) set_tmp_tree(other, "", 2);
         }
         if (g_difLen >= 0) {   /* skin also has its own caption text - clear it,
                                   or the stock 'DUELIST 01' sits over the name */
-            void *dif = node_path(panelTf, g_difPath, g_difLen);
+            void *dif = by_name(panelTf, g_difName, g_difPath, g_difLen);
             if (dif && dif != node) {
                 set_tmp_tree(dif, "", 2);
                 void *par = tf_parent(dif);
@@ -1185,7 +1221,7 @@ static void label_panel(void *panelTf, const char *text) {
             }
         }
         if (g_artLen >= 0) {                     /* skin carries both - drop the art */
-            void *art = node_path(panelTf, g_artPath, g_artLen);
+            void *art = by_name(panelTf, g_artName, g_artPath, g_artLen);
             /* The artwork is usually one sprite inside a node named for the
                caption - /Duelist/TextPlayer/01 on VRAINS - and hiding only the
                sprite left the fixed 'DUELIST' word sitting over the name field.
@@ -2544,6 +2580,7 @@ static void build_four_player_layout(void *self) {
        the skin has not filled them in yet.  The per-frame pass below waits for
        the numbers to appear and then decides. */
     g_capLen = -1; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
+    g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
     { static int once; if (!once) { once = 1;
         nlog("--- panel diff (Life01 vs Life02) ---");
         dump_panel_diff(panels[0], panels[1], 5, ""); } }
@@ -2675,6 +2712,7 @@ static void mod_teardown(void *self) {
     memset(g_phold, 0, sizeof g_phold);
     memset(g_panel, 0, sizeof g_panel);
     g_np = 0; g_psettle = 0; g_labelled = 0; g_capLen = -1; g_capIsSprite = 0; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
+    g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
     g_row = NULL; g_settle = 0; g_wrappedArea = NULL; g_stableN = 0; g_timerFix = 0.0f; g_rowFix = 0.0f;
     nlog("teardown: screen handed back in stock shape");
 }
@@ -2710,10 +2748,12 @@ static void settle_panels(void) {
         if (g_capLen < 0) {
             if (!panel_ready(g_panel[0]) || !panel_ready(g_panel[1])) return;
             g_capLen = -1; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
+    g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
             diff_caption(g_panel[0], g_panel[1], 6, 0);
             if (caption_is_the_score(g_panel[0])) {
                 nlog("cap: rejected - the search landed on LifePoints");
                 g_capLen = -1; g_artLen = -1; g_txtLen = -1; g_difLen = -1;
+    g_capName[0] = g_artName[0] = g_txtName[0] = g_difName[0] = 0;
                 return;
             }
         }
@@ -2722,7 +2762,7 @@ static void settle_panels(void) {
             if (g_capLen != said) {
                 said = g_capLen;
                 char nm[64] = "?";
-                void *n0 = node_at(g_panel[0], g_capLen);
+                void *n0 = cap_node(g_panel[0]);
                 if (n0) tf_name(n0, nm, sizeof nm);
                 nlog("cap: len=%d sprite=%d artLen=%d node '%s'",
                      g_capLen, g_capIsSprite, g_artLen, nm);
@@ -2730,7 +2770,7 @@ static void settle_panels(void) {
         }
         if (g_capLen >= 0) {
             char src[64] = "";
-            void *srcNode = node_at(g_panel[0], g_capLen);
+            void *srcNode = cap_node(g_panel[0]);
             void *srcTmp  = srcNode && k_TMP ? get_comp(srcNode, k_TMP) : NULL;
             if (srcTmp && m_get_text) cs_str(inv(m_get_text, srcTmp, NULL), src, sizeof src);
             for (int i = 0; i < g_np; i++) {
