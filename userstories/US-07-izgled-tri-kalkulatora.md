@@ -1,6 +1,6 @@
 # US-07 — Izgled kalkulatora sa tri igrača
 
-**Status:** nije počelo      **Poslednja provera:** —
+**Status:** nije potvrđeno      **Implementirano u:** v242
 
 ## Kako je zahtev postavljen
 > "On se bavi samo izgledom kalkulatora, i gotov je tek kada su svi ekrani poravnati po sredini
@@ -97,3 +97,23 @@ R1 u `docs/DESIGN.md`.
 Poznato da ume da pukne, iz ranijih rasporeda: ARC-V crta štit viši od svog pravougaonika, pa
 se mora meriti `max(rect, plate)`; GX-u se redovi dodiruju ako je razmak fiksan umesto izveden
 iz visine table; 5D's ima X dugme u gornjem levom uglu koje ume da sedne na prvog duelista.
+
+### Kako je urađeno (v242) — prvi prolaz
+
+Dve izmene, obe merene:
+
+**Vodoravno.** Ispravka za panel bez parnjaka bila je vezana za `i == 4`. Sada postoji
+`lone_panel(np)` — peti od pet, treći od tri — pa usamljeni panel dobija poravnanje po tabli i
+kod tri igrača, ne samo kod pet.
+
+**Vertikalno.** Kod tri igrača sredina donjeg reda ostaje prazna, a tu stoji red dugmadi, pa je
+usamljeni panel sletao na njega. Kad se raspored smiri, mod izmeri gornju prazninu (od vrha
+`LifeArea` do gornje ivice najvišeg panela) i donju (od donje ivice najnižeg panela do vrha
+reda dugmadi, uvećanog za razmak), pa **podigne sva tri slota za pola razlike**. Time se
+istovremeno oslobađa red dugmadi i izjednačava prostor gore i dole, bez smanjivanja panela.
+
+Ništa od ovoga nije konstanta po skinu: mere dolaze iz `drawn_box()` i iz pravougaonika
+`LifeArea`, pa svaki dizajn sleti tamo gde je njegova tabla, a ne gde bi zajednička formula
+pogodila. **Očekivanje je da ovo neće biti dovoljno za svih osam** — priča i traži da se svaki
+prođe zasebno; log ispisuje `3P: raised by X (above A, below B)` po ulasku, pa se za svaki
+dizajn vidi šta je izmereno.

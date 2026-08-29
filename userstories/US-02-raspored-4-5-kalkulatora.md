@@ -23,7 +23,7 @@
 2. Izađi X-om i uđi ponovo — isti raspored (drugi ulazak ima drugu veličinu rect-a).
 3. Promeni dizajn kalkulatora, **uđi i izađi jednom** (promena dizajna važi tek od sledećeg
    ulaska), pa gledaj — i tako za svih osam.
-4. Ponovi za 4 ekrana i za 3.
+4. Ponovi za 4 ekrana.
 
 ## Tehnički
 `build_four_player_layout()` u `src/native/mod.c`. Kompletna pravila rasporeda i sve

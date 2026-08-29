@@ -567,6 +567,24 @@ static int g_duel_dumped = 0;
 
 /* find Duel/LifeArea under CalculatorMulti */
 static void build_four_player_layout(void *self);
+
+/* Which slot has nobody opposite it: the fifth of five, the third of three.
+   Written as i == 4 before, which is the same thing only when there are five. */
+static int lone_panel(int np) { return np == 5 ? 4 : (np == 3 ? 2 : -1); }
+
+/* Bottom and top edge of a rect in the same space drawn_box reports in. */
+static int rect_world_span(void *tf, float *bottom, float *top) {
+    void *rt = tf ? get_comp(tf, k_RectTransform) : NULL;
+    void *arr = (rt && k_Vector3 && il2cpp_array_new) ? il2cpp_array_new(k_Vector3, 4) : NULL;
+    if (!arr || !m_GetWorldCorners) return 0;
+    void *a[1] = { arr };
+    inv(m_GetWorldCorners, rt, a);
+    float *f = (float *)((char *)arr + 32);
+    float y0 = f[1], y2 = f[7];
+    *bottom = y0 < y2 ? y0 : y2;
+    *top    = y0 < y2 ? y2 : y0;
+    return 1;
+}
 static void wire_panels(void);
 static void dump_texts(void *tf, const char *path, int depth);
 static int tf_visible(void *tf);
@@ -2864,6 +2882,37 @@ static void settle_panels(void) {
         }
     }
 
+    /* Three panels leave the middle of the bottom row empty, which is exactly
+       where the button row lives, so the lone panel lands on top of it.  Raise
+       the block instead of shrinking it: measure the gap above the top panel and
+       the gap between the bottom panel and the buttons, and split the difference.
+       Measured rather than budgeted, so each skin lands where its own plate is,
+       not where a shared formula guesses. */
+    if (g_psettle == 90 && g_np == 3 && g_wrappedArea) {
+        float top = -1e9f, bot = 1e9f, cx, cy, w, hh;
+        for (int i = 0; i < 3; i++) {
+            if (!drawn_box(g_panel[i], &cx, &cy, &w, &hh)) { top = -1e9f; break; }
+            if (cy + hh * 0.5f > top) top = cy + hh * 0.5f;
+            if (cy - hh * 0.5f < bot) bot = cy - hh * 0.5f;
+        }
+        float areaTop, areaBot;
+        if (top > -1e8f && rect_world_span(g_wrappedArea, &areaBot, &areaTop)) {
+            float floorY = areaBot;
+            if (g_row && drawn_box(g_row, &cx, &cy, &w, &hh))
+                floorY = cy + hh * 0.5f + hh * 0.35f;   /* clear of the buttons */
+            float lift = ((areaTop - top) - (bot - floorY)) * 0.5f;
+            if (lift > 0.001f || lift < -0.001f) {
+                for (int i = 0; i < 3; i++) {
+                    float sx, sy, sz;
+                    if (world_pos(g_slot[i], &sx, &sy, &sz))
+                        set_world(g_slot[i], sx, sy + lift, sz);
+                }
+                nlog("3P: raised by %.2f (above %.2f, below %.2f)",
+                     lift, areaTop - top, bot - floorY);
+            }
+        }
+    }
+
     if (g_psettle == 60 && g_np) {          /* settled: report what landed where */
         float cx, cy, w, h, rcx, rcy;
         if (g_row && world_centre(g_row, &rcx, &rcy))
@@ -2892,13 +2941,13 @@ static void settle_panels(void) {
         if (!world_centre(g_panel[i], &px, &py)) continue;
         if (!world_pos(g_phold[i], &hx, &hy, &hz)) continue;
         sx += gshift;
-        if (i == 4) {
-            /* The middle window has no mirror partner, so whatever offset the
-               plate has inside its rect is on show.  Align the plate, not the
-               rect and not the union of everything drawn: the union counts the
-               glow, which on the Standard skin reaches 1.3 units further right
-               than the plate and hung the window 53px to the left.  Fall back to
-               the union on a skin where no plate can be identified. */
+        if (i == lone_panel(g_np)) {
+            /* A panel with no mirror partner shows whatever offset the plate has
+               inside its rect.  Align the plate, not the rect and not the union
+               of everything drawn: the union counts the glow, which on Standard
+               reaches 1.3 units further right than the plate and hung the window
+               53px to the left.  Fall back to the union where no plate can be
+               identified. */
             float dx, dy, dw, dh;
             if (plate_axis(g_panel[i], &dx)) px = dx;
             else if (drawn_box(g_panel[i], &dx, &dy, &dw, &dh)) px = dx;
