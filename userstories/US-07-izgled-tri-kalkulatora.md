@@ -9,7 +9,8 @@
 Dopunjeno odgovorima na pitanja (2026-08-29):
 > **Raspored:** dva gore, treći dole u sredini.
 > **Preklapanje sa donjim redom dugmadi:** podigni ceo blok, zadrži veličinu panela.
-> **Poravnanje:** "treba biti handlovano za svaki posebno".
+> **Poravnanje:** "treba biti handlovano za svaki posebno" — misli se na **svaki od osam
+> dizajna**, ne na svaki panel.
 
 ## Šta je u obimu
 
@@ -19,11 +20,11 @@ Dopunjeno odgovorima na pitanja (2026-08-29):
 - [ ] Dva panela gore, treći dole, **vodoravno centriran** između njih.
 - [ ] Gornja dva su simetrična u odnosu na sredinu ekrana — leva i desna ivica jednako
       udaljene od ivica ekrana.
-- [ ] **Svaki panel se poravnava zasebno**, po tabli koju skin crta na njemu samom, ne po
-      pravougaoniku i ne pod pretpostavkom da se pomeraj levog i desnog međusobno poništava.
-      Tri panela znače tri merenja, ne jedno pravilo.
-- [ ] **Treći panel je stvarno na sredini** po toj meri. Ovo je uslov koji se najlakše
-      previdi jer razlika ume da bude mala.
+- [ ] **Svaki od osam dizajna se dovodi u red zasebno i zasebno se proverava.** Nije dovoljno
+      da jedno pravilo prođe na Standardu i da se pretpostavi za ostale — svih osam se gleda,
+      i onaj koji nije centriran dobija svoje rešenje.
+- [ ] **Treći panel je stvarno na sredini**, mereno po tabli koju skin crta, ne po
+      pravougaoniku. Ovo je uslov koji se najlakše previdi jer razlika ume da bude mala.
 - [ ] Ceo blok je vertikalno centriran: prazan prostor iznad gornjeg reda i ispod trećeg
       panela je približno jednak.
 - [ ] Nijedan panel se ne preklapa sa donjim redom dugmadi (Log, Reset, Undo, Tools),
@@ -53,7 +54,8 @@ ispunjena** — meri se samo raspored.
    jednak, i da li dugmad Log/Reset/Undo/Tools stoje slobodno.
 3. Izađi X-om i uđi ponovo — drugi ulazak ima drugu veličinu rect-a i ume da izgleda drugačije.
 4. Promeni dizajn kalkulatora, **uđi i izađi jednom** (promena važi tek od sledećeg ulaska),
-   pa gledaj. I tako za svih osam.
+   pa gledaj. **I tako za svih osam, jedan po jedan** — svaki se prihvata ili odbija za sebe,
+   a priča je gotova tek kad prođu svih osam.
 5. Vrati na „4 ekrana" pa „5 ekrana" i uđi — moraju izgledati kao pre.
 
 ## Tehnički
@@ -76,11 +78,17 @@ nikad ne odradi svoje i panel ostane pomeren za onoliko koliko je tabla pomerena
 pravougaoniku. Uslov treba da bude „ovo je usamljeni panel", ne „ovo je peti panel" — što je
 isti oblik greške kao redni broj reda u US-06.
 
-Ali popravljanje samo tog uslova nije ono što je traženo. Ispravka se sada radi **jednom, za
-jedan panel**, uz pretpostavku da se kod para levo-desno pomeraj table poništi jer je prefab
-ogledan. Traženo je da se **svaki panel poravna zasebno**, po svojoj tabli. To ujedno rešava i
-razlike među dizajnima bez posebnog slučaja po skinu: mera dolazi iz onoga što je nacrtano, a
-ne iz formule po skinu (pravilo R2 u `docs/DESIGN.md` — meri, ne predviđaj).
+Popravka tog uslova je verovatno prvi korak, ali se **ne sme uzeti kao rešenje za svih osam**.
+Korisnik traži da se svaki dizajn dovede u red i proveri zasebno: osam skinova crta tablu
+različito u odnosu na svoj pravougaonik, i ono što centrira Standard ne mora ni da pomeri
+ARC-V.
+
+Redosled rada koji to poštuje: prvo mera koja važi svuda — `plate_axis()` na usamljenom panelu,
+sa uslovom „ovo je usamljeni panel" umesto „indeks 4" — pa onda **obilazak svih osam** i za
+svaki koji i dalje nije centriran, njegovo sopstveno rešenje. Poseban slučaj po skinu je
+dozvoljen tek kad merenje ne uspe da ga centrira, i tada se u kodu piše koji je skin i zašto
+(pravilo R2 u `docs/DESIGN.md` je i dalje „meri, ne predviđaj" — konstanta po skinu je
+poslednje sredstvo, ne prvo).
 
 Za vertikalno centriranje i za razmak od donjeg reda dugmadi: `topMargin` gura ceo blok
 naniže, a `cy` određuje razmak redova. Meri se prema `LifeArea`, nikad u pikselima — pravilo
