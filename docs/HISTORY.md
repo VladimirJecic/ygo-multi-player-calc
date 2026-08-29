@@ -93,15 +93,18 @@ stayed lit after leaving and re-entering the screen. That is the normal cost of 
 
 ---
 
-## Current state (v231)
+## Current state (v232 — stable)
 
 Working: settings rows for 4 and 5 screens, the panel grid on all eight designs, independent
 counters, per-panel keypad, Reset/Undo, the widened Log dialog, the Log Archives list with
 names and timestamps, and restore-from-log.
 
-The user reported three defects against v230 on 2026-08-29. Two are addressed in v231 and
-**neither has been looked at on the phone yet** — wireless debugging was off, so v231 was built
-and signed but never installed. Until the user has seen them, they are fixes in name only.
+**v232 is the first build of this run the user has accepted.** Designs 1-5 — Standard, Simple,
+Duel Monsters, GX, 5D's — are correct: names in place, not struck through, no clipped second
+copy, no flicker, and a rename survives saving. Designs 6-8 (ZEXAL, ARC-V, VRAINS) still show
+the caption too small or not at all; see `userstories/US-04`.
+
+The three defects reported against v230 on 2026-08-29 resolved as follows.
 
 1. **Names struck through on every panel.** — *fixed in v231, unverified.* `label_panel` moved
    the mod's name field onto the stock caption's world centre, in both axes. Three skins rule

@@ -2,10 +2,20 @@
 # Screenshot the phone into a local png.
 # usage: shot.sh <out.png>
 #
-# exec-out, not `shell screencap`: the shell transport mangles the binary stream
-# on some builds and you get a png that no decoder will open.
+# screencap writes to a file on shared storage and we read it from there, rather
+# than piping the image back: the binary stream does not survive the shell
+# transport intact and you get a png no decoder will open.
 set -u
+DIR=$(cd "$(dirname "$0")" && pwd)
 OUT=${1:?usage: shot.sh <out.png>}
-adb exec-out screencap -p > "$OUT" 2>/dev/null
-test -s "$OUT" || { echo "shot: screencap produced nothing (screen off? adb down?)"; exit 1; }
-echo "$OUT"
+TMP=/storage/emulated/0/Download/.shot-$$.png
+
+"$DIR/shell.sh" "screencap -p $TMP" >/dev/null 2>&1
+if [ -s "$TMP" ]; then
+  mv -f "$TMP" "$OUT"
+  echo "$OUT"
+else
+  rm -f "$TMP"
+  echo "shot: screencap produced nothing - is the screen on?" >&2
+  exit 1
+fi

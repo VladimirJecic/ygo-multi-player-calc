@@ -1,8 +1,8 @@
 # ygo-calc — Yu-Gi-Oh! Neuron 5-player calculator mod
 
 Runtime mod of `jp.konami.YugiohOcgSupports` 4.12.0 (Unity, IL2CPP, arm64) that turns the
-stock 2-player life-point calculator into a 3/4/5-player one. Current build: **v231**
-(built and signed, not yet installed or looked at — see `docs/HISTORY.md`).
+stock 2-player life-point calculator into a 3/4/5-player one. Current build: **v232**,
+the first stable one of this run — duelist names are correct on designs 1-5, still open on 6-8.
 
 This file is the entry point. Read it, then read the doc that matches what you are about to do.
 
@@ -46,13 +46,39 @@ one wins.
    Standard, Simple, Duel Monsters, GX, 5D's, ZEXAL, ARC-V, VRAINS. Each is a separate prefab
    with different proportions and a different node layout. Something that looks right on
    Standard is routinely broken on ARC-V or VRAINS.
-4. **The user is the test harness.** There is no unit test and no emulator. Every version is
-   built, installed with `adb`, and looked at on the phone. Say what you changed and what the
-   user should look for, then wait for what they saw.
-5. **One version = one build number.** `scripts/build.sh <prev> <new>` takes the previous apk
-   as its base and swaps in the new `.so`. Do not skip numbers and do not rebuild in place.
+4. **The phone is the test harness.** There is no unit test and no emulator. Reach it with
+   `scripts/device/shell.sh` (Shizuku, not adb — `docs/BUILD.md` says why). Never ship a fix
+   you have not seen run: three unseen builds in a row produced a regression on 2026-08-29.
+5. **One version = one build number, and a build that did not work does not get its own.**
+   `scripts/build.sh <prev> <new>` takes the previous apk as its base and swaps in the new
+   `.so`. Do not skip numbers. Rebuilding the same number in place is correct when the last
+   build of it was broken and never accepted — the user asked for it that way.
 6. **Never guess at the game's internals.** Look them up in `reference/il2cpp/classdump.txt`.
    Methods the game never calls are stripped from the binary and simply do not exist.
+
+## Before every commit — a cleaning pass
+
+Do this on your own diff **before** you commit, every time. The next agent to open this file
+has to orient fast and must not be led into assuming something that is not true.
+
+1. **Read the diff as a stranger.** Delete any comment that narrates what the code plainly
+   says, or that retells how you found the bug. Keep the ones that record a trap, a measured
+   number, or why the obvious alternative is wrong — those are why this codebase is workable.
+2. **Say it once.** If a mechanism is written out over the declaration and again over the
+   function, keep the copy next to the mechanism and cut the other.
+3. **Name for what a thing is, not how it works.** A helper is named for what it returns.
+   A global that shadows another (`g_capPath` / `g_capName`) should read as a pair.
+4. **Fix the docs you just made wrong, in the same commit.** `docs/DESIGN.md` and
+   `userstories/` are read as fact; a stale line there costs more than no line at all.
+5. **Leave the structure better than you found it.** If you had to hunt for something,
+   that is the thing to move or name properly before you commit.
+
+## Tests
+
+There is no test suite here and one is not wanted for its own sake — the phone is the test
+(`docs/BUILD.md`). Add a check only where it can catch something that has actually gone wrong:
+`scripts/build.sh` bails on an empty `.so` because a failed compile once got signed and
+shipped. A check that cannot fail is build time spent for nothing, on every version.
 
 ## Working language
 

@@ -632,18 +632,9 @@ static void dump_panel_diff(void *a, void *b, int depth, const char *path) {
         dump_panel_diff(tf_child(a, i), tf_child(b, i), depth - 1, here);
 }
 
-/* The caption is found by walking the two stock panels in lockstep and noting
-   the child indices, but it must not be *resolved* that way afterwards.
-   label_panel re-siblings the caption to the end of its parent so the skin's
-   own bar cannot paint over it, and that renumbers everything after it - so on
-   the next frame the same index path pointed at the next node along.  The
-   caption walked TextPlayer -> PlayerName -> Text_obj -> Image, one node per
-   frame, writing the name into a different node each time and clearing the one
-   before it.  That is the flicker: the name was never in one place long enough
-   to be seen, and ended up in a sprite node that cannot draw text at all.
-   Resolve by name instead - names survive reordering. */
 #define CAPMAX 8
 static int g_capPath[CAPMAX];
+/* Names as well as paths: the paths go stale.  See panel_node(). */
 static char g_capName[64], g_artName[64], g_txtName[64], g_difName[64];
 static int g_capLen = -1;
 static int g_capIsSprite;
@@ -779,11 +770,16 @@ static void *node_path(void *root, const int *path, int len) {
 }
 static void *node_at(void *root, int len) { return node_path(root, g_capPath, len); }
 
-/* Resolve a remembered node on one panel.  By name first: label_panel re-siblings
-   the caption to the end of its parent, which renumbers the children after it, so
-   the index path the search recorded is only good until the first write.  The
-   path stays as the fallback for a skin whose node has no usable name. */
-static void *by_name(void *panelTf, const char *nm, const int *path, int len) {
+/* Resolve a node the search remembered, on one panel.
+
+   By name, not by the child index the search recorded: label_panel re-siblings
+   the caption to the end of its parent so the skin's own bar cannot paint over
+   it, and that renumbers every child after it.  Resolved by index, the caption
+   walked TextPlayer -> PlayerName -> Text_obj -> Image, one node per frame,
+   writing the name into a new node each time and clearing the one before -
+   ending in a sprite that cannot draw text.  The path stays as the fallback for
+   a node with no usable name. */
+static void *panel_node(void *panelTf, const char *nm, const int *path, int len) {
     if (!panelTf || len < 0) return NULL;
     if (nm && nm[0]) {
         void *t = find_deep(panelTf, nm, 5);
@@ -793,7 +789,7 @@ static void *by_name(void *panelTf, const char *nm, const int *path, int len) {
 }
 static void *cap_node(void *panelTf) {
     if (g_capLen < 0) return NULL;
-    return by_name(panelTf, g_capName, g_capPath, g_capLen);
+    return panel_node(panelTf, g_capName, g_capPath, g_capLen);
 }
 
 
@@ -1107,8 +1103,8 @@ static void label_panel(void *panelTf, const char *text) {
         int haveStock = 0;
         {
             void *stock = NULL;
-            if (g_difLen >= 0) stock = by_name(panelTf, g_difName, g_difPath, g_difLen);
-            if (!stock && g_artLen >= 0) stock = by_name(panelTf, g_artName, g_artPath, g_artLen);
+            if (g_difLen >= 0) stock = panel_node(panelTf, g_difName, g_difPath, g_difLen);
+            if (!stock && g_artLen >= 0) stock = panel_node(panelTf, g_artName, g_artPath, g_artLen);
             if (stock && stock != node) haveStock = world_centre(stock, &stockX, &stockY);
         }
         {   /* A caption that measures nothing has a font it cannot draw with.
@@ -1156,8 +1152,6 @@ static void label_panel(void *panelTf, const char *text) {
                and still nothing showed. */
             void *par = tf_parent(node);
             int n = par ? tf_children(par) : 0;
-            /* Only if it is not already there.  Re-siblinging every frame
-               reorders the parent every frame for no gain. */
             if (n > 1 && tf_child(par, n - 1) != node) set_sibling(node, n - 1);
         }
         /* ZEXAL splits the caption in two: a fixed DUELIST in the parent with
@@ -1207,12 +1201,12 @@ static void label_panel(void *panelTf, const char *text) {
                                   from its own two duelist names, and on Standard
                                   that came out as a clipped second copy beside
                                   ours */
-            void *other = by_name(panelTf, g_txtName, g_txtPath, g_txtLen);
+            void *other = panel_node(panelTf, g_txtName, g_txtPath, g_txtLen);
             if (other && other != node) set_tmp_tree(other, "", 2);
         }
         if (g_difLen >= 0) {   /* skin also has its own caption text - clear it,
                                   or the stock 'DUELIST 01' sits over the name */
-            void *dif = by_name(panelTf, g_difName, g_difPath, g_difLen);
+            void *dif = panel_node(panelTf, g_difName, g_difPath, g_difLen);
             if (dif && dif != node) {
                 set_tmp_tree(dif, "", 2);
                 void *par = tf_parent(dif);
@@ -1221,7 +1215,7 @@ static void label_panel(void *panelTf, const char *text) {
             }
         }
         if (g_artLen >= 0) {                     /* skin carries both - drop the art */
-            void *art = by_name(panelTf, g_artName, g_artPath, g_artLen);
+            void *art = panel_node(panelTf, g_artName, g_artPath, g_artLen);
             /* The artwork is usually one sprite inside a node named for the
                caption - /Duelist/TextPlayer/01 on VRAINS - and hiding only the
                sprite left the fixed 'DUELIST' word sitting over the name field.
@@ -1235,27 +1229,18 @@ static void label_panel(void *panelTf, const char *text) {
             }
         }
         if (haveStock) {
-            /* Horizontally only.  This nudge exists because VRAINS anchors its
-               name box off the right of the plate; the vertical half of it was
-               never asked for, and it is what struck every name through on every
-               other skin.  The skins rule the caption off with a hairline of its
-               own - Standard's /Duelist/ImageLine is 7.78 x 0.04 - and the stock
-               caption sits on that rule.  Matching the stock caption's y parked
-               our name on the rule, so every name came out crossed out.  The
-               name field is already at the right height in its own skin; only
-               its x ever needs correcting. */
+            /* Horizontally only.  The nudge is for VRAINS, which anchors its
+               name box off the right of the plate.  Matching the y as well
+               parked the name on the hairline the skins rule their caption off
+               with (Standard's Duelist/ImageLine is 7.78 x 0.04), so every name
+               came out struck through.  The field's own height is correct. */
             float cx, cy, wx, wy, wz;
             if (world_centre(node, &cx, &cy) && world_pos(node, &wx, &wy, &wz))
                 set_world(node, wx + (stockX - cx), wy, wz);
         }
-        {   /* Diagnostics only - this block changes nothing on screen.
-
-               ARC-V and VRAINS write a name that never appears, and a screenshot
-               cannot separate "off the plate" from "too small to see" from
-               "written into a node the skin never draws".  Print the node we
-               chose, its box, where it ended up, and how its size compares with
-               the score on the same plate.  Capped so the per-frame settle pass
-               cannot flood the log. */
+        {   /* Diagnostics only.  A screenshot cannot separate "off the plate"
+               from "too small to see" from "written into a node the skin never
+               draws", so print all three.  Capped: this runs every frame. */
             static int said;
             if (said < 20) { said++;
                 char nm[64] = "?";
@@ -2547,12 +2532,9 @@ static void build_four_player_layout(void *self) {
        Leave the difference as clearance. */
     const float cyMax = h * 0.5f - sh2 * 0.52f - h * 0.010f - topMargin;
     if (cy > cyMax) cy = cyMax;
-    /* The third panel goes on the bottom row, not in the middle of the screen.
-       Parking it at the centre left the whole three-panel block sitting in the
-       upper half with an empty band underneath, which is what "3 player mode is
-       not centred" was: the block was centred on nothing, it just hung from the
-       top.  On the bottom row the block is symmetric about the centre line and
-       keeps the row spacing every other count already uses. */
+    /* The third panel goes on the bottom row, not at the centre of the screen:
+       parked at the centre it left the block hanging from the top with an empty
+       band underneath.  On the bottom row it is symmetric about the centre. */
     const float ty[5] = { cy - topMargin, cy - topMargin,
                           -cy - topMargin, -cy - topMargin,
                           -topMargin };

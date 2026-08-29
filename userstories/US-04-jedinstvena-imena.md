@@ -1,6 +1,6 @@
 # US-04 — Promena imena olovčicom, bez duplikata
 
-**Status:** ne radi   **Poslednja provera:** v230   **Popravka čeka proveru:** v231
+**Status:** radi na dizajnima 1-5, otvoreno na 6-8   **Poslednja provera:** v232 (stabilna)
 
 ## Kako je zahtev postavljen
 > "korisnik aplikacije na svakom ekranu ima opciju da klikom na olovčicu promeni svoje ime.
@@ -136,3 +136,35 @@ Sumnja: `panel_ready()` propušta pretragu pre nego što je skin popunio panel, 
 brojača razlikuju (7500 naspram 8000 na snimcima) diff sleti na `LifePoints`,
 `caption_is_the_score()` ga odbije i sve se resetuje — pa naizmenično ima i nema natpisa.
 Treći ulazak "zamrzne" jer se zatekne slučaj u kom se brojači poklapaju.
+
+
+---
+
+## Stanje na v232 — potvrdio korisnik 2026-08-29
+
+**Dizajni 1-5 rade: Standard, Simple, Duel Monsters, GX, 5D's.** Imena stoje na svom mestu,
+nema precrtavanja, nema odsečene druge kopije, nema treperenja, preimenovanje ostaje posle
+čuvanja. Ovo je prva stabilna verzija ovog kriterijuma.
+
+Rešio ih je jedan kvar, ne tri: natpis se pamtio kao **redni broj deteta**, a `label_panel`
+pomera natpis na kraj roditelja, čime prenumeriše svu decu iza njega. Ime je zato svaki frejm
+odlazilo u sledeći čvor - `TextPlayer` → `PlayerName` → `Text_obj` → `Image` - upisujući se u
+nov i brišući prethodni, i završavajući u spriteu koji tekst ne može ni da nacrta. Odatle
+istovremeno i treperenje, i nestajanje, i odsečena kopija: `Text_obj` je 50x50 naspram 338
+koliko ima natpis, taman za dva slova. Čvorovi se sada pamte po imenu (`panel_node()`).
+
+### Ostaje: dizajni 6-8
+
+Nije pokriveno ovim prolazom, uzeti u nekom trenutku:
+
+- [ ] **ZEXAL (6)** — ime se vidi ali je presitno, i prvo slovo je krupnije i drugog oblika.
+      Prazno polje `PlayerName` mu je 3.19 x 0.28 naspram brojača 5.14 x 0.96, odnos 0.29,
+      gde je na Standardu 0.40.
+- [ ] **ARC-V (7)** — imena se uopšte ne vide. Odnos veličine mu je 0.46, isti kao kod Duel
+      Monsters-a koji radi, pa to nije objašnjenje. Nije dijagnostikovano.
+- [ ] **VRAINS (8)** — imena se uopšte ne vide. Odnos 0.22, najmanji od svih.
+
+Pokušaj podizanja veličine slova prema brojaču je jednom pisan i povučen jer nije bio proveren.
+Sada se može uraditi kako treba: `scripts/device/logcat.sh` daje `cap where:` liniju sa imenom
+čvora, njegovim pravougaonikom, položajem i veličinom slova naspram brojača, po panelu - dakle
+prvo pogledati log na ta tri dizajna, pa tek onda menjati kod.
