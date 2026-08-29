@@ -17,51 +17,59 @@ horizontalno.
 Ime igrača da se vidi na VRAINS dizajnu, u svim režimima, **bez kvarenja preostalih sedam
 dizajna**.
 
-## Istraživanje pre koda
+## Utvrđena činjenica: polje postoji
 
-Ovo je prva priča koja počinje pitanjem, ne izmenom. Odgovoriti pre nego što se dira kod:
+**`Life01/Duelist/PlayerName` postoji na VRAINS-u. Ne treba praviti nov lejer.**
 
-- [ ] **Da li polje za ime uopšte postoji na VRAINS-u, ili je izgubljeno?** Korisnikova sumnja
-      je da je lejer obrisan pri smanjivanju aplikacije.
-- [ ] **Ako ne postoji — koliko je teško rekonstruisati ga?**
-- [ ] Ako postoji a ne crta se — **šta tačno nedostaje**: font, materijal, atlas, ili je čvor
-      ugašen.
+Ovo nije zaključak nego snimak žive aplikacije. `scripts/device/gfxsweep.sh` prošeta kroz
+dizajne i zapiše šta panel stvarno crta; rezultat je `reference/gfx_inventory.txt`:
 
-### Šta se već zna, da se ne istražuje ponovo
+| dizajn | čvor | kutija |
+|---|---|---|
+| standard | `/Life01/Duelist/PlayerName` | 3.76 x 0.44 |
+| simple | `/Life01/Duelist/PlayerName` | 6.44 x 0.44 |
+| duelmonsters | `/Life01/Duelist/PlayerName` | 3.16 x 0.64 |
+| gx | `/Life01/Duelist/PlayerName` | 4.44 x 1.22 |
+| 5ds | `/Life01/Duelist/PlayerName` | 6.44 x 1.42 |
+| zexal | `/Life01/Duelist/PlayerName` | 3.19 x 0.28 |
+| arcv | `/Life01/Duelist/PlayerName` | 3.44 x 0.56 |
+| **vrains** | **`/Life01/Duelist/PlayerName`** | **2.22 x 0.24** |
 
-**Ovo nije kvar moda.** Korisnik javlja da se ime ne vidi ni u igrinim sopstvenim režimima —
-2 ekrana, vertikalno, horizontalno — u koje mod uopšte ne dira. Znači stock igra na VRAINS-u
-ne ume da prikaže ime, a mod to samo nasleđuje.
+Čvor je na **svih osam**, istog imena i na istom mestu u stablu — deo je zajedničkog prefaba
+panela, ne nečega što VRAINS ima ili nema. Na svih osam je i **ugašen** (`hidden`), jer ga skin
+isporučuje isključenog i pali ga tek kad korisnik unese svoje ime; to je normalno stanje, ne
+kvar, i mod ga svuda pali sa `set_active`.
 
-**Čvor postoji.** Iz `reference/gfx_inventory.txt`:
+Dakle pitanje nije „da li postoji" nego **„zašto ne crta"**.
 
-```
-/Life01/Duelist/Background      8.67x3.89   img
-/Life01/Duelist/TextPlayer      2.22x0.24   img
-/Life01/Duelist/TextPlayer/01   2.22x0.24   img
-/Life01/Duelist/PlayerName      2.22x0.24   hidden
-```
+## Šta ostaje da se utvrdi
 
-`PlayerName` je tu, kao i na svih osam dizajna. Kutija mu je najmanja od svih —
-2.22 x 0.24 naspram 3.76 x 0.44 na Standardu.
+- [ ] **Zašto `PlayerName` na VRAINS-u ne crta ništa**, iako je aktivan, prave veličine, na
+      pravom mestu i sadrži ime.
 
-**Postoji ranija dijagnoza, zapisana u kodu** (`src/native/mod.c`, oko `label_panel`):
+Ranija sesija je taj odgovor već zapisala u kod (`src/native/mod.c`, oko `label_panel`):
 
 > VRAINS' PlayerName is active, opaque, the right size and in the right place, and holds the
 > name — and shows nothing, because the font it was built with is not in this trimmed-down APK
 > any more.
 
-Dakle sumnja ide na **font, ne na lejer**. Mod već ima rezervu za to: izmeri koliko je string
-širok, i ako izađe kao ništa, pozajmi font kojim panel crta svoj brojač. Ta rezerva očigledno
-ili ne opali ili nije dovoljna — to je prvo što treba proveriti u logu.
+Sumnja dakle ide na **font, ne na lejer**. Mod već ima rezervu: pita TMP koliko je string širok
+i da li materijal uopšte ima teksturu, pa ako ne, pozajmi font kojim panel crta svoj brojač.
+Ta rezerva ili ne opali ili nije dovoljna — **to je prvo što treba videti u logu**, i to je
+jedina stvar koja još nije potvrđena merenjem.
 
-**Lokalno nema dokaza da su asseti obrisani.** Trenutni apk ima **1795** asset ulaza naspram
-**1785** u dekodiranom stablu, jer je `src/tools/addassets.py` već vratio 977 izgubljenih
-bundle-ova. Netaknuti Neuron apk za poređenje **više ne postoji**, pa se gubitak ne može
-dokazati poređenjem — samo posredno, po tome šta u runtime-u nedostaje.
+### Šta se ne sme raditi
+
+**Ne porediti sa dekodiranim stablom** (`apk/decoded/`). To je verzija kojoj su lejeri greškom
+obrisani i po tome je manja; poređenje sa njom vodi na pogrešan zaključak. Netaknut Neuron apk
+koji bi presudio šta je originalno postojalo **više ne postoji**.
+
+**Ovo nije kvar moda.** Ime se ne vidi ni u igrinim sopstvenim režimima — 2 ekrana, vertikalno,
+horizontalno — u koje mod ne dira. Stock igra na VRAINS-u ne ume da prikaže ime, a mod to samo
+nasleđuje.
 
 **Dva skina istog oblika rade.** 5D's i ARC-V takođe crtaju natpis kao sliku i nemaju art za
-igrače 3-5, i na njima ime radi. Šta VRAINS ima drugačije od njih je najkraći put do odgovora.
+igrače 3-5, pa je razlika između njih i VRAINS-a najkraći put do odgovora.
 
 ## Kriterijumi prijema
 - [ ] Ime igrača se vidi na VRAINS dizajnu, u svih šest režima: **2, 3, 4 i 5 ekrana,
@@ -97,3 +105,5 @@ nacrta ništa — zato se gleda tekstura, ne samo širina.
 
 Ako se potvrdi da nedostaje asset: `src/tools/addassets.py` je već jednom vratio 977 bundle-ova
 iz donorskog apk-a i to je put kojim bi se išlo — ali donor više ne postoji, pa ga treba nabaviti.
+Pre toga vredi probati jeftiniju stvar: font se već pozajmljuje od brojača na istoj tabli, pa
+ako to proradi, nikakav asset ne treba dodavati.
