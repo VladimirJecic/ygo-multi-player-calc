@@ -23,5 +23,6 @@ apksigner sign --ks "$ROOT/keys/$KS_FILE" \
   --ks-key-alias "$KS_ALIAS" --out "$ROOT/apk/dist/neuron-mod-v$NEW.apk" \
   "$ROOT/build/neuron-mod-unsigned.apk"
 rm -f "$ROOT/build/neuron-mod-unsigned.apk"
-adb install -r "$ROOT/apk/dist/neuron-mod-v$NEW.apk"
+# Shizuku, not adb - see scripts/device/shell.sh for why.
+"$ROOT/scripts/device/install.sh" "$ROOT/apk/dist/neuron-mod-v$NEW.apk"
 echo "INSTALLED v$NEW"

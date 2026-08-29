@@ -15,11 +15,44 @@ Everything runs on the phone itself, in Termux. There is no desktop in this loop
 | `apktool` 3.0.3 | **one-off** decode/rebuild for the smali patch | Termux `apktool` |
 | `javac` + `d8` | **one-off** build of `neuron.mod.Toaster` → `classes4.dex` | `openjdk-17`, `android-tools` |
 
-`adb` is authorised over wireless debugging and shows up as `emulator-5554`.
+### Getting onto the device: Shizuku, not adb
+
+**Use `scripts/device/shell.sh`.** It runs a command as uid 2000 (`shell`) through
+Shizuku's `rish`, which is a local binder call into a service the user has already
+authorised. It needs no pairing, no port, and survives reboots of this session.
+
+adb over wireless debugging does not work unattended: Android hands out a **fresh random
+port every time wireless debugging is toggled**, and the pairing code only ever appears on
+the phone's screen. An agent in Termux cannot read either, so it can only stop and ask —
+which is what stalled two rounds of this work.
+
+`rish` and its dex ship inside the Shizuku apk; no download is needed:
+
+```sh
+A=$(pm path moe.shizuku.privileged.api | cut -d: -f2)
+unzip -o -j "$A" assets/rish assets/rish_shizuku.dex -d ~
+sed -i 's/"PKG"/"com.termux"/' ~/rish        # RISH_APPLICATION_ID
+chmod +x ~/rish && chmod 400 ~/rish_shizuku.dex   # Android 14+ refuses a writable dex
+```
+
+Shizuku itself has to be running — its own app starts it. The shell it gives you is in the
+`log`, `adb`, `input` and `sdcard_rw` groups, which covers logcat, `pm install`, `input tap`
+and `screencap`.
+
+| Want | Command |
+|---|---|
+| any shell command | `scripts/device/shell.sh 'cmd'` |
+| the mod's log | `scripts/device/logcat.sh` |
+| install a build | `scripts/device/install.sh apk/dist/neuron-mod-vNNN.apk` |
+
+**`pm install` cannot read an apk on `/storage/emulated/0`** — that path is fuse and
+system_server is denied read on it (`Unable to open file`, with an avc denial in the log).
+`install.sh` stages the apk under `/data/local/tmp` first, which is why it exists.
+
 Raise the logcat buffer once per session or the mod's output is evicted within a minute:
 
 ```sh
-adb logcat -G 16M
+scripts/device/shell.sh 'logcat -G 16M'
 ```
 
 ---
