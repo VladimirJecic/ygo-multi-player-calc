@@ -153,9 +153,9 @@ nov i brišući prethodni, i završavajući u spriteu koji tekst ne može ni da 
 istovremeno i treperenje, i nestajanje, i odsečena kopija: `Text_obj` je 50x50 naspram 338
 koliko ima natpis, taman za dva slova. Čvorovi se sada pamte po imenu (`panel_node()`).
 
-### Ostaje: dizajni 6-8
+### Edge case-ovi koje ovaj user story ne pokriva
 
-Nije pokriveno ovim prolazom, uzeti u nekom trenutku:
+Dizajni 6-8. Nisu deo onoga što je ovde prihvaćeno; uzeti u nekom trenutku:
 
 - [ ] **ZEXAL (6)** — ime se vidi ali je presitno, i prvo slovo je krupnije i drugog oblika.
       Prazno polje `PlayerName` mu je 3.19 x 0.28 naspram brojača 5.14 x 0.96, odnos 0.29,
