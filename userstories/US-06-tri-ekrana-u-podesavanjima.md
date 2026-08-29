@@ -1,6 +1,6 @@
 # US-06 — Opcija „3 ekrana" u podešavanjima kalkulatora
 
-**Status:** nije počelo      **Poslednja provera:** —
+**Status:** nije potvrđeno      **Implementirano u:** v241
 
 ## Kako je zahtev postavljen
 > "napisi novi za dodavanje 3 player opcije u calculator settings, ali budi veoma strog sta je
@@ -76,3 +76,15 @@ Dve stvari koje će pući ako se ne paze:
 
 Trajno pamćenje ide kroz `files/neuronmod.mode` i kroz originalni `OnClickCalcMode`, koji svoj
 upis radi bezuslovno. Detalji ekrana podešavanja: `docs/DESIGN.md` §2.
+
+### Kako je urađeno (v241)
+
+`apply_selection()` je bojio redove **po rednom broju**, što je radilo samo dok je redni broj
+bio jednak režimu. Čim „3 ekrana" (režim 5) stane iznad „4 ekrana" (režim 3), to prestaje da
+važi. Zato sada postoji `g_rowMode[]` — tabela koja se puni **tamo gde se redovi prave**, pa na
+pitanje „šta radi red i" postoji jedan odgovor umesto pravila koje pozivalac mora da pamti.
+
+Redovi se kloniraju redom Three, Four, Five; kloniranje dodaje na kraj, pa taj redosled i daje
+traženi raspored na ekranu. Zaštita od dupliranja je pomerena sa „3 ili 5 redova" na
+**„3 ili 6"**, a tabela se puni u obe grane, i kad se redovi prave i kad se zatečeni ponovo
+koriste — da se ne bi razišle.

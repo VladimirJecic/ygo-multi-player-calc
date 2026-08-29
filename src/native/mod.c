@@ -409,21 +409,30 @@ static void *row_radio_image(void *rowTf) {
     return radio ? get_comp(radio, k_Image) : NULL;
 }
 
-/* paint the radio buttons so exactly `index` looks selected */
-static void apply_selection(void *container, int index) {
+/* Which mode each row in the container selects.  Filled where the rows are
+   built, so there is one answer to "what does row i do" rather than a rule the
+   caller has to remember.  Until "3 screens" was added the row's own index was
+   that answer, and it stops being true the moment a row is not last. */
+#define ROWMAX 8
+static int g_rowMode[ROWMAX];
+static int g_rowCount;
+
+/* paint the radio buttons so exactly the row carrying `mode` looks selected */
+static void apply_selection(void *container, int mode) {
     if (!container || !m_set_sprite || !g_onSprite || !g_offSprite) return;
     int n = tf_children(container), changed = 0;
     for (int i = 0; i < n; i++) {
         void *img = row_radio_image(tf_child(container, i));
         if (!img) continue;
-        void *want = (i == index) ? g_onSprite : g_offSprite;
+        int rowMode = (i < g_rowCount) ? g_rowMode[i] : i;
+        void *want = (rowMode == mode) ? g_onSprite : g_offSprite;
         if (inv(m_get_sprite, img, NULL) == want) continue;   /* already right */
         void *a[1] = { want };
         inv(m_set_sprite, img, a);
         changed++;
     }
-    g_selMode = index;
-    if (changed) nlog("selection repainted: row %d of %d (%d changed)", index, n, changed);
+    g_selMode = mode;
+    if (changed) nlog("selection repainted: mode %d of %d rows (%d changed)", mode, n, changed);
 }
 
 /* capture the on/off radio sprites from the stock rows */
@@ -4807,7 +4816,7 @@ static void my_OnEnable(void *self, void *mi) {
     char nm[64]; tf_name(node, nm, sizeof nm);
     int n = tf_children(node);
     nlog("toggle container '%s' has %d rows", nm, n);
-    if (n != 3 && n != 5) { nlog("unexpected row count %d, not touching it", n); return; }
+    if (n != 3 && n != 6) { nlog("unexpected row count %d, not touching it", n); return; }
 
     void *srcTf = tf_child(node, 0);                 /* the "Multi" row = "2 screens" */
     void *srcGo = srcTf ? inv(m_get_gameObject, srcTf, NULL) : NULL;
@@ -4816,13 +4825,22 @@ static void my_OnEnable(void *self, void *mi) {
     capture_sprites(self, node);
     g_container = node;
 
-    if (n == 3) {
-        clone_row(srcGo, node, "Four", "4 screens", 3);
-        clone_row(srcGo, node, "Five", "5 screens", 4);
-        nlog("container now has %d rows", tf_children(node));
-    } else {
-        nlog("extra rows already present, reusing them");
+    /* Order on screen is 3, 4, 5; the mode numbers are not in that order, which
+       is why the table above exists.  Cloning appends, so cloning in this order
+       is what puts "3 screens" above "4 screens". */
+    static const struct { const char *obj, *label; int mode; } extra[] = {
+        { "Three", "3 screens", 5 },
+        { "Four",  "4 screens", 3 },
+        { "Five",  "5 screens", 4 },
+    };
+    g_rowCount = 0;
+    for (int i = 0; i < 3; i++) g_rowMode[g_rowCount++] = i;      /* the game's own three */
+    for (int i = 0; i < 3; i++) {
+        if (n == 3) clone_row(srcGo, node, extra[i].obj, extra[i].label, extra[i].mode);
+        g_rowMode[g_rowCount++] = extra[i].mode;
     }
+    if (n == 3) nlog("container now has %d rows", tf_children(node));
+    else        nlog("extra rows already present, reusing them");
 
     int cur = read_calc_mode();
     if (cur >= 3) g_selMode = cur;
