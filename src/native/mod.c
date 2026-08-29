@@ -3573,6 +3573,17 @@ static void table_rows(void *ct, int nc, const int *start, const int (*lifeTbl)[
    the archive's own LogId, and put back when that duel is opened again. */
 #define LOGDB "/data/user/0/jp.konami.YugiohOcgSupports/files/neuronmod.logdb"
 #define LOGDB_KEEP 40
+/* build.sh drops this marker after installing; the mod clears the saved duels
+   on the next start and removes it.  It lives on external storage because the
+   shell user cannot reach the app's private directory, where LOGDB is. */
+#define WIPE_MARK "/storage/emulated/0/Android/data/jp.konami.YugiohOcgSupports/files/neuronmod.wipe"
+
+static void logdb_wipe_if_asked(void) {
+    if (access(WIPE_MARK, F_OK) != 0) return;
+    int gone = (unlink(LOGDB) == 0);
+    unlink(WIPE_MARK);
+    nlog("logdb: fresh build, saved duels %s", gone ? "cleared" : "were already empty");
+}
 
 static int  g_arcNp, g_arcN;
 static int  g_arcStart[5];
@@ -5041,6 +5052,7 @@ static void *worker(void *a) {
     SYM(il2cpp_field_static_get_value); SYM(il2cpp_field_static_set_value);
     SYM(il2cpp_image_get_class_count); SYM(il2cpp_image_get_class);
 
+    logdb_wipe_if_asked();
     g_selMode = load_mode();
     load_names();
     nlog("persisted extra mode = %d", g_selMode);

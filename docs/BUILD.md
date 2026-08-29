@@ -72,6 +72,17 @@ What it does:
    — credentials sourced from the untracked `keys/keystore.env`
 4. `adb install -r neuron-mod-v<new>.apk`
 
+### Saved duels are cleared on every build
+
+`build.sh` drops a marker beside the game's external files and the mod deletes its saved-duel
+database (`files/neuronmod.logdb`) on the next start, then removes the marker — so a build
+starts from an empty Log rather than the previous session's test duels. A marker rather than a
+delete because the shell user cannot reach the app's private directory, which is where the
+database lives.
+
+This clears **the mod's own table of life points per duel**. The game's own Log Archive list is
+its data, not ours, and is left alone.
+
 **The base is always the previous apk**, not a pristine one. The patched `classes.dex`, the
 added `classes4.dex` and the restored asset bundles all ride along inside it. This is why
 `apk/dist/` must always keep the newest build, and why versions must not be skipped.

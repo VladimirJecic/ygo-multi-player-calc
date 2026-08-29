@@ -34,3 +34,12 @@ Raspored kolona, pinovanje veličine fonta i obrada Log Archives liste (imena, v
 oznaka, sečenje footera koji vraća svoje tabove na četiri različita događaja) su u
 **`docs/DESIGN.md` §5**. Vraćanje duela ide preko `player_set_life()` / `player_set_name()`
 direktno, a ne preko `AddLife`, jer `AddLife` upisuje i istoriju — a vraćanje duela nije potez.
+
+## Razvojna napomena (v237)
+
+Od v237 svaki bild briše modovu bazu sačuvanih partija (`files/neuronmod.logdb`), da Log ne bi
+kretao pun testnih duela iz prethodne sesije. `build.sh` ostavi marker pored igrinih eksternih
+fajlova, mod ga na sledećem startu vidi, obriše bazu i ukloni marker — jednokratno po bildu.
+
+Briše se **modova tabela životnih poena po duelu**. Igrina sopstvena lista Log Archives je
+njeni podaci, ne naši, i ne dira se.

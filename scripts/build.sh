@@ -25,4 +25,11 @@ apksigner sign --ks "$ROOT/keys/$KS_FILE" \
 rm -f "$ROOT/build/neuron-mod-unsigned.apk"
 # Shizuku, not adb - see scripts/device/shell.sh for why.
 "$ROOT/scripts/device/install.sh" "$ROOT/apk/dist/neuron-mod-v$NEW.apk"
+
+# Ask the mod to drop the saved duels on its next start.  Marker rather than a
+# delete, because the shell user cannot reach the app's private directory.
+"$ROOT/scripts/device/shell.sh" \
+  'touch /storage/emulated/0/Android/data/jp.konami.YugiohOcgSupports/files/neuronmod.wipe' \
+  >/dev/null 2>&1 || echo "warning: could not ask for a log wipe"
+
 echo "INSTALLED v$NEW"
