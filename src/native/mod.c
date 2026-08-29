@@ -635,7 +635,26 @@ static void dump_panel_diff(void *a, void *b, int depth, const char *path) {
 #define CAPMAX 8
 static int g_capPath[CAPMAX];
 /* Names as well as paths: the paths go stale.  See panel_node(). */
-static char g_capName[64], g_artName[64], g_txtName[64], g_difName[64];
+#define NAMEPATH 256
+static char g_capName[NAMEPATH], g_artName[NAMEPATH],
+            g_txtName[NAMEPATH], g_difName[NAMEPATH];
+
+/* "Duelist/TextPlayer/img" for a node len levels below the panel root. */
+static void name_path_of(void *node, int len, char *out, size_t cap) {
+    char seg[CAPMAX][64];
+    void *t = node;
+    out[0] = 0;
+    if (len <= 0 || len > CAPMAX) return;
+    for (int i = len - 1; i >= 0; i--) {
+        if (!t) return;
+        tf_name(t, seg[i], sizeof seg[i]);
+        t = tf_parent(t);
+    }
+    for (int i = 0; i < len; i++) {
+        size_t l = strlen(out);
+        snprintf(out + l, cap - l, "%s%s", l ? "/" : "", seg[i]);
+    }
+}
 static int g_capLen = -1;
 static int g_capIsSprite;
 static int g_artPath[CAPMAX];
@@ -677,7 +696,7 @@ static int diff_caption(void *a, void *b, int depth, int len) {
             if (!strstr(nm, "Life") && g_difLen < 0) {
                 for (int k = 0; k < len; k++) g_difPath[k] = g_capPath[k];
                 g_difLen = len;
-                snprintf(g_difName, sizeof g_difName, "%s", nm);
+                name_path_of(a, len, g_difName, sizeof g_difName);
             }
         }
         /* Duel Monsters and VRAINS draw the caption as artwork and leave the
@@ -695,7 +714,7 @@ static int diff_caption(void *a, void *b, int depth, int len) {
             if ((strstr(nm, "Name") || strstr(nm, "Player")) && !strstr(nm, "Life")) {
                 for (int k = 0; k < len; k++) g_txtPath[k] = g_capPath[k];
                 g_txtLen = len;
-                snprintf(g_txtName, sizeof g_txtName, "%s", nm);
+                name_path_of(a, len, g_txtName, sizeof g_txtName);
                 nlog("cap: blank name field '%s' at depth %d", nm, len);
             }
         }
@@ -722,7 +741,7 @@ static int diff_caption(void *a, void *b, int depth, int len) {
                    skins carry both, and leaving the art on stacks two captions */
                 for (int k = 0; k < len; k++) g_artPath[k] = g_capPath[k];
                 g_artLen = len;
-                snprintf(g_artName, sizeof g_artName, "%s", nm);
+                name_path_of(a, len, g_artName, sizeof g_artName);
             }
         }
     }
@@ -770,16 +789,24 @@ static void *node_path(void *root, const int *path, int len) {
 }
 static void *node_at(void *root, int len) { return node_path(root, g_capPath, len); }
 
-/* Resolve a node the search remembered, on one panel.  By name, not by the
-   child index the search recorded: label_panel re-siblings the caption to the
-   end of its parent, which renumbers every child after it.  The path stays as
-   the fallback for a node with no usable name. */
-static void *panel_node(void *panelTf, const char *nm, const int *path, int len) {
+static void *find_child(void *tf, const char *name);
+
+/* Resolve a node the search remembered, on one panel.  By its chain of names,
+   not by the child index the search recorded: label_panel re-siblings the
+   caption to the end of its parent, which renumbers every child after it.  The
+   whole chain and not the leaf, because a leaf name need not be unique - Duel
+   Monsters has both Duelist/Background/line/img and Duelist/TextPlayer/img. */
+static void *panel_node(void *panelTf, const char *names, const int *path, int len) {
     if (!panelTf || len < 0) return NULL;
-    if (nm && nm[0]) {
-        void *t = find_deep(panelTf, nm, 5);
-        if (t) return t;
+    void *t = panelTf;
+    for (const char *p = names ? names : ""; *p && t; ) {
+        char seg[64]; int k = 0;
+        while (*p && *p != '/' && k < (int)sizeof seg - 1) seg[k++] = *p++;
+        seg[k] = 0;
+        if (*p == '/') p++;
+        t = find_child(t, seg);
     }
+    if (t && t != panelTf) return t;
     return node_path(panelTf, path, len);
 }
 static void *cap_node(void *panelTf) {
