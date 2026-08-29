@@ -178,9 +178,9 @@ prvo pogledati log na ta tri dizajna, pa tek onda menjati kod.
 
 ---
 
-## v235 — veći font na ZEXAL-u
+## v235 — veći font na ZEXAL-u; **pokvario Simple**, ispravljeno u v236
 
-Cilj: ime na ZEXAL-u je čitljivo, ali sitno. **Čeka proveru.**
+Cilj: ime na ZEXAL-u je čitljivo, ali sitno.
 
 Veličina slova se ne bira konstantom nego se meri prema brojaču na istoj tabli, i podiže se
 samo ispod onoga na čemu već stoje dizajni koji se dobro čitaju:
@@ -200,3 +200,51 @@ Od v235 je budžet po dizajnu, pa sledeći ulazak na ZEXAL daje tačan broj u li
 
 Ako se ispostavi da je ZEXAL iznad 0.30, podizanje neće ni krenuti i prag se podešava po
 izmerenom broju — ne pogađanjem.
+
+---
+
+## v236 — dva kvara koja je otkrio korisnik posle preimenovanja
+
+Prijava: posle preimenovanja na Standardu, **Simple (2)** i **ZEXAL (6)** izgube sva imena, i
+posle restarta. Log je pokazao dva nezavisna uzroka.
+
+### Simple: v235 je postavio font veći od kutije u kojoj piše
+
+```
+cap size: 36.0 -> 79.8 (score 210.0)
+cap where: 'TextPlayer' rect 580.00x50.00 ... fs 79.8
+```
+
+Kutija natpisa je visoka **50**, a font je postao **79.8** — jedan i po put viši od kutije, i
+tekst je prestao da se crta. Pravilo iz v235 je poredilo font natpisa sa fontom brojača, a
+Simple je tu nisko (36 naspram 210) iako se savršeno čita.
+
+Ispravno merilo je **kutija natpisa naspram panela**, jer to razdvaja stvarne slučajeve:
+
+| dizajn | kutija | panel | odnos | podiže se |
+|---|---|---|---|---|
+| ZEXAL | 25 | 400 | 0.063 | da |
+| VRAINS | 25 | 400 | 0.063 | da |
+| Standard | 50 | 540 | 0.093 | ne |
+| ARC-V | 50 | 400 | 0.125 | ne |
+| Simple | 50 | 296 | 0.169 | ne |
+| Duel Monsters | 110 | 420 | 0.262 | ne |
+
+Prag je 0.08. Simple se od v236 ne dira i vraća se na ono što je radilo u v232.
+
+### ZEXAL: prazno polje za ime prestane da bude prazno čim se neko preimenuje
+
+Isti dizajn, pre i posle preimenovanja:
+
+```
+13:27:35  cap: blank name field 'PlayerName' at depth 2
+13:27:35  cap: len=2 ... node 'PlayerName'          <- ispravno
+13:31:26  cap: len=3 ... node '01'                  <- posle preimenovanja
+```
+
+Polje `Duelist/PlayerName` se prepoznavalo po tome što je **prazno na oba igrina panela**. Čim
+se preimenuje bilo koji od prva dva duelista, igra svoje ime upiše baš tamo — polje više nije
+prazno, prepoznavanje otkaže, i natpis padne nazad na `01`, brojčanu polovinu podeljenog
+natpisa, koju je v234 baš izbegavao. Odatle „posle preimenovanja nestanu imena".
+
+Od v236 se polje prihvata i kada drži jedno od igrina dva imena, ne samo kada je prazno.

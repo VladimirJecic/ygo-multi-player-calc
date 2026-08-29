@@ -667,6 +667,24 @@ static int g_difIsNumber;      /* written whenever g_difLen is */
 static int g_capSaid;          /* diagnostic line budget, reset per design */
 
 /* node names the skins use for the bit that carries the duelist's name */
+#define NAMEMAX 40
+static void *name_get(int which);
+
+/* Is this the skin's own name field?  Empty on both panels, or holding the
+   game's two duelist names - which is what it holds once either of them has
+   been renamed, and testing only for empty lost the field at that point. */
+static int field_is_free(const char *ta, const char *tb) {
+    if (!ta[0] && !tb[0]) return 1;
+    char g1[NAMEMAX] = "", g2[NAMEMAX] = "";
+    void *s1 = name_get(0), *s2 = name_get(1);
+    if (s1) cs_str(s1, g1, sizeof g1);
+    if (s2) cs_str(s2, g2, sizeof g2);
+    if (!g1[0] && !g2[0]) return 0;
+    int aok = !ta[0] || (g1[0] && !strcmp(ta, g1)) || (g2[0] && !strcmp(ta, g2));
+    int bok = !tb[0] || (g1[0] && !strcmp(tb, g1)) || (g2[0] && !strcmp(tb, g2));
+    return aok && bok;
+}
+
 static int name_ish(const char *n) {
     return strstr(n, "Player") || strstr(n, "Name") || strstr(n, "Text");
 }
@@ -710,7 +728,7 @@ static int diff_caption(void *a, void *b, int depth, int len) {
            name itself to a blank text field beside it - /Duelist/PlayerName,
            empty on both panels, so the differing-text search walked straight
            past it and no panel was ever captioned. */
-        if (!ta[0] && !tb[0] && g_txtLen < 0) {
+        if (g_txtLen < 0 && field_is_free(ta, tb)) {
             char nm[64];
             tf_name(a, nm, sizeof nm);
             /* Only a field that is named for the duelist.  'Text' was too loose:
@@ -951,7 +969,6 @@ static void caption_from(const char *src, int n, char *out, size_t cap) {
 
    So keep our own five, write them into the panels ourselves, and put the
    game's own two back the way they were whenever the rename was not for them. */
-#define NAMEMAX 40
 #define NAME_FILE "/data/user/0/jp.konami.YugiohOcgSupports/files/neuronmod.names"
 static char g_pname[5][NAMEMAX];
 static int  g_nameDirty;
@@ -1179,14 +1196,22 @@ static void label_panel(void *panelTf, const char *text) {
                 }
             }
         }
-        {   /* Lift a caption that is far smaller than the score beside it.
-               Measured against the panel's own score, never a constant, and
-               only below what the designs that read well already sit at:
-               Standard 0.50, ARC-V 0.56, Duel Monsters 0.31. */
+        {   /* Lift a caption whose own box is a sliver of the panel.
+
+               Not "small against the score": that caught Simple, whose caption
+               box is 50 of a 296 panel and reads fine, and set 79.8pt type in
+               it - half again taller than the box, and it stopped drawing at
+               all.  The box against the panel separates them: ZEXAL 25/400 and
+               VRAINS 25/400 against Simple 50/296, Standard 50/540, Duel
+               Monsters 110/420, ARC-V 50/400. */
             void *lp = find_deep(panelTf, "LifePoints", 4);
             void *lc = lp ? get_comp(lp, k_TMP) : NULL;
             void *cc = get_comp(node, k_TMP);
-            if (lc && cc && m_tmp_getFs && m_tmp_setFs && m_tmp_autosize) {
+            float boxW = 0, boxH = 0, panW = 0, panH = 0;
+            rect_size(node, &boxW, &boxH);
+            rect_size(panelTf, &panW, &panH);
+            if (lc && cc && m_tmp_getFs && m_tmp_setFs && m_tmp_autosize
+                && panH > 1.0f && boxH > 1.0f && boxH < panH * 0.08f) {
                 void *rl = inv(m_tmp_getFs, lc, NULL);
                 void *rc = inv(m_tmp_getFs, cc, NULL);
                 if (rl && rc) {
@@ -1199,7 +1224,8 @@ static void label_panel(void *panelTf, const char *text) {
                         inv(m_tmp_autosize, cc, a);
                         a[0] = &want; inv(m_tmp_setFs, cc, a);
                         if (g_capSaid < 20) { g_capSaid++;
-                            nlog("cap size: %.1f -> %.1f (score %.1f)", cfs, want, lpfs); }
+                            nlog("cap size: %.1f -> %.1f (score %.1f, box %.0f of panel %.0f)",
+                                 cfs, want, lpfs, boxH, panH); }
                     }
                 }
             }
