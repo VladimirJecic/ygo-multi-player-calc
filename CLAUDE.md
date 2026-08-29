@@ -1,8 +1,8 @@
 # ygo-calc — Yu-Gi-Oh! Neuron 5-player calculator mod
 
 Runtime mod of `jp.konami.YugiohOcgSupports` 4.12.0 (Unity, IL2CPP, arm64) that turns the
-stock 2-player life-point calculator into a 3/4/5-player one. Current build: **v232**,
-the first stable one of this run — duelist names are correct on 1, 2, 4, 5 and 7.
+stock 2-player life-point calculator into a 3/4/5-player one. Current build: **v234** — duelist names are
+correct on seven of the eight designs; only VRAINS is left.
 
 This file is the entry point. Read it, then read the doc that matches what you are about to do.
 

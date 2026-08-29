@@ -1,6 +1,6 @@
 # US-04 — Promena imena olovčicom, bez duplikata
 
-**Status:** radi na 1, 2, 4, 5, 7; otvoreno na 3, 6, 8   **Poslednja provera:** v232
+**Status:** radi na 1-7; ostaje samo VRAINS (8)   **Poslednja provera:** v234
 
 ## Kako je zahtev postavljen
 > "korisnik aplikacije na svakom ekranu ima opciju da klikom na olovčicu promeni svoje ime.
@@ -142,7 +142,8 @@ Treći ulazak "zamrzne" jer se zatekne slučaj u kom se brojači poklapaju.
 
 ## Stanje na v232 — potvrdio korisnik 2026-08-29
 
-**Rade: Standard (1), Simple (2), GX (4), 5D's (5) i ARC-V (7).** Imena stoje na svom mestu,
+**Rade svi osim VRAINS-a: Standard (1), Simple (2), Duel Monsters (3), GX (4), 5D's (5),
+ZEXAL (6) i ARC-V (7).** Imena stoje na svom mestu,
 nema precrtavanja, nema odsečene druge kopije, nema treperenja, preimenovanje ostaje posle
 čuvanja. ARC-V u potpunosti zadovoljava ovaj kriterijum — `reference/screenshots/v232-arcv-ok.png`.
 
@@ -163,12 +164,10 @@ koliko ima natpis, taman za dva slova. Čvorovi se sada pamte po imenu (`panel_n
 
 Dizajni 6-8. Nisu deo onoga što je ovde prihvaćeno; uzeti u nekom trenutku:
 
-- [ ] **ZEXAL (6)** — isti oblik kvara kao kod Duel Monsters-a: igrina reč i ime se slažu jedno
-      na drugo. Log to kaže jasno — `cap: len=3 ... node '01'`, dakle natpis završava u
-      `Duelist/TextPlayer/01`, brojčanoj polovini podeljenog natpisa, dok roditelj `TextPlayer`
-      zadržava reč `DUELIST`. Prazno `PlayerName` na dubini 2 se nađe pa preskoči. Od v234 se,
-      kada je tekst čvora koji se razlikuje sam broj, bira prazno polje za ime.
-      **Čeka proveru.**
+- [x] **ZEXAL (6)** — ~~igrina reč i ime su se slagali jedno na drugo~~ **rešeno u v234.**
+      Natpis je završavao u `Duelist/TextPlayer/01`, brojčanoj polovini podeljenog natpisa, dok
+      je roditelj `TextPlayer` zadržavao reč `DUELIST`. Sada se, kada čvor koji se razlikuje
+      sadrži samo cifre, bira prazno polje za ime.
 - [ ] **VRAINS (8)** — nije provereno na v232. Na v231 se ime nije videlo; odnos 0.22,
       najmanji od svih.
 

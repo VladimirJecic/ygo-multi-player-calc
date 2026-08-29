@@ -93,7 +93,7 @@ stayed lit after leaving and re-entering the screen. That is the normal cost of 
 
 ---
 
-## Current state (v232 — stable)
+## Current state (v234 — stable)
 
 Working: settings rows for 4 and 5 screens, the panel grid on all eight designs, independent
 counters, per-panel keypad, Reset/Undo, the widened Log dialog, the Log Archives list with
@@ -103,8 +103,8 @@ names and timestamps, and restore-from-log.
 GX (4), 5D's (5) and ARC-V (7) are correct: names in place, not struck through, no clipped
 second copy, no flicker, and a rename survives saving.
 
-Still open: Duel Monsters (3) draws the stock `DUELIST 01` over the name — a regression at
-v232; ZEXAL (6) shows the name but far too small; VRAINS (8) has not been checked since v231.
+v233 fixed Duel Monsters (3) and v234 ZEXAL (6), both accepted. Seven of the eight designs
+now satisfy US-04; only VRAINS (8) is left, and it has not been looked at since v231.
 See `userstories/US-04`.
 
 The three defects reported against v230 on 2026-08-29 resolved as follows.
